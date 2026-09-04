@@ -87,18 +87,26 @@ class Engine {
     log.info(`${chain.slug} ${trade.side.toUpperCase().padEnd(4)} ${trade.leader} ${sym} ${size}${fracTxt}`);
 
     if (!shadow) return;
-    this.notify(
-      [
-        `<b>${trade.side.toUpperCase()}</b>  ${trade.leader}`,
-        `<b>${sym}</b> ${size}${fracTxt}`,
-        `${chain.name}${row.liquidity_usd ? ` · liq $${Math.round(row.liquidity_usd).toLocaleString()}` : ''}`,
-        `<a href="https://dexscreener.com/${chain.dexscreener}/${trade.token}">chart</a> · ` +
-          `<a href="${chain.explorer}/tx/${trade.tx_hash}">tx</a>`,
-      ].join('\n')
-    );
 
-    if (trade.side === 'buy') this.openShadowPositions(eventId, row, quote);
-    else this.applyLeaderSell(row, price);
+    // Muting stops alerts and stops opening new positions, but a muted
+    // leader's sells still close positions we already opened from them.
+    // Otherwise muting would strand live positions with no exit.
+    const muted = !!this.st.isMuted.get(trade.leader);
+
+    if (!muted) {
+      this.notify(
+        [
+          `<b>${trade.side.toUpperCase()}</b>  ${trade.leader}`,
+          `<b>${sym}</b> ${size}${fracTxt}`,
+          `${chain.name}${row.liquidity_usd ? ` · liq $${Math.round(row.liquidity_usd).toLocaleString()}` : ''}`,
+          `<a href="https://dexscreener.com/${chain.dexscreener}/${trade.token}">chart</a> · ` +
+            `<a href="${chain.explorer}/tx/${trade.tx_hash}">tx</a>`,
+        ].join('\n')
+      );
+    }
+
+    if (trade.side === 'sell') this.applyLeaderSell(row, price);
+    else if (!muted) this.openShadowPositions(eventId, row, quote);
   }
 
   // One pending position per policy. Entry price is filled in later, at

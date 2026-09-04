@@ -66,13 +66,35 @@ with today's number would look like PnL when it is noise.
 
 ### Telegram
 
-Setting `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` sends one message per leader
-trade, with the size, what share of their bag a sell was, current liquidity, and
-links to the chart and the transaction. Expect roughly five an hour. Leave either
-variable blank to turn it off.
+Set `TELEGRAM_BOT_TOKEN` and send the bot `/start`. The first chat to message it
+becomes the owner and is remembered in the database, so there is no chat id to
+look up. Every other chat is ignored.
 
-There is no bot command surface. This runs for one person, so reporting lives in
-`npm run report`.
+You get one alert per leader trade (roughly five an hour) with the size, what
+share of their bag a sell was, current liquidity, and links to the chart and the
+transaction. Plus these commands:
+
+| command | |
+| --- | --- |
+| `/status` | what is running, uptime, block heights |
+| `/report` | policy scoreboard and entry cost |
+| `/leaders` | who is trading the most |
+| `/pnl` | profit and loss per leader |
+| `/positions` | open shadow positions with live PnL |
+| `/clusters` | tokens several leaders bought |
+| `/policies` | what the five exit strategies do |
+| `/mute <handle>` | stop alerting and stop copying them |
+| `/unmute <handle>`, `/muted` | reverse it, list them |
+| `/pause`, `/resume` | all alerts |
+
+Muting stops alerts and stops opening new positions from that leader, but their
+sells still close positions already opened from them. Otherwise muting would
+strand live positions with no exit. Their trades stay in the event log either
+way, because the raw history should be complete regardless of what we were
+listening to.
+
+`npm run report` renders the same data to a terminal from the same queries in
+`src/report.js`, so the two views cannot drift apart.
 
 ## The five policies
 
@@ -132,6 +154,8 @@ src/chain/rpc.js     minimal JSON-RPC, no web3 dependency
 src/price/           DexScreener client
 src/shadow/engine.js event handling, entries, marks
 src/shadow/policies.js the exit rules and PnL accounting
+src/report.js        shared report queries
+src/telegram/        command surface and alert formatting
 scripts/backfill.js  historical events
-scripts/report.js    the scoreboard
+scripts/report.js    the scoreboard, rendered to a terminal
 ```

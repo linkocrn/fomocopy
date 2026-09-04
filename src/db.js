@@ -105,6 +105,21 @@ function migrate(db) {
       chain_id INTEGER PRIMARY KEY,
       block    INTEGER NOT NULL
     );
+
+    -- Runtime state the Telegram bot owns: the owner chat id it bound to and
+    -- whether alerts are paused. Kept in the db so a restart remembers.
+    CREATE TABLE IF NOT EXISTS settings (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    );
+
+    -- Muting a leader stops their alerts and stops opening shadow positions
+    -- from their trades. Events are still recorded either way, because the raw
+    -- history should stay complete no matter what we were listening to.
+    CREATE TABLE IF NOT EXISTS muted (
+      leader TEXT PRIMARY KEY,
+      since  INTEGER NOT NULL
+    );
   `);
 }
 
@@ -153,6 +168,14 @@ function statements(db) {
 
     getCursor: db.prepare('SELECT block FROM cursors WHERE chain_id = ?'),
     setCursor: db.prepare('INSERT OR REPLACE INTO cursors (chain_id, block) VALUES (?, ?)'),
+
+    getSetting: db.prepare('SELECT value FROM settings WHERE key = ?'),
+    setSetting: db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)'),
+
+    mute: db.prepare('INSERT OR REPLACE INTO muted (leader, since) VALUES (?, ?)'),
+    unmute: db.prepare('DELETE FROM muted WHERE leader = ?'),
+    isMuted: db.prepare('SELECT 1 FROM muted WHERE leader = ?'),
+    listMuted: db.prepare('SELECT leader FROM muted ORDER BY leader'),
   };
 }
 
