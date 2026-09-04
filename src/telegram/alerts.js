@@ -29,6 +29,10 @@ const exact = (n) => (n == null ? null : `$${Math.round(n).toLocaleString('en-US
 
 const fomoProfile = (handle) => `https://fomo.family/profile/${handle}`;
 
+// Leads every alert so buys and sells separate at a glance, before you read
+// anything. The leader icon then sits next to the handle it belongs to.
+const sideIcon = (side) => (side === 'buy' ? '🟢' : '🔴');
+
 function makeAlerter(send) {
   const bursts = new Map();
 
@@ -38,7 +42,7 @@ function makeAlerter(send) {
     if (t.liquidity) bits.push(`liq ${money(t.liquidity)}`);
 
     return [
-      `${icon(t.leader)} <b>${t.side.toUpperCase()}</b>  ${t.leader}`,
+      `${sideIcon(t.side)} <b>${t.side.toUpperCase()}</b>  ${icon(t.leader)} ${t.leader}`,
       `<b>${t.symbol}</b>  ${t.sizeUsd ? `<b>${exact(t.sizeUsd)}</b>` : 'size unknown'}` +
         (t.fracOfBag != null ? `  ·  ${(t.fracOfBag * 100).toFixed(t.fracOfBag < 0.1 ? 1 : 0)}% of bag` : ''),
       bits.length ? `${t.chain.name}  ·  ${bits.join('  ·  ')}` : t.chain.name,
@@ -51,7 +55,7 @@ function makeAlerter(send) {
 
   function rollup(b) {
     return [
-      `${icon(b.leader)} <b>${b.side.toUpperCase()}</b>  ${b.leader} kept going`,
+      `${sideIcon(b.side)} <b>${b.side.toUpperCase()}</b>  ${icon(b.leader)} ${b.leader} kept going`,
       `<b>${b.symbol}</b>  ${b.extras} more ${b.side}${b.extras === 1 ? '' : 's'}` +
         (b.totalUsd ? `  ·  <b>${exact(b.totalUsd)}</b> across ${b.extras + 1}` : ''),
       b.lastMcap ? `${b.chain.name}  ·  mcap now ${money(b.lastMcap)}` : b.chain.name,
