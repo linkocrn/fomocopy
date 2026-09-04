@@ -3,6 +3,7 @@
 const { logger } = require('../util/log');
 const { ENTRY, MARK_OFFSETS_MS, POLICIES } = require('../../config/policy');
 const { fetchPrice } = require('../price/dexscreener');
+const { settlement } = require('../chain/settle');
 const { onLeaderSell, onPriceTick, reduce } = require('./policies');
 
 const log = logger('shadow');
@@ -50,17 +51,24 @@ class Engine {
     }
   }
 
-  // `shadow: false` records the event without opening positions, and `price:
-  // false` skips the price lookup. Backfill uses both: DexScreener only serves
-  // current prices, so pricing a week-old trade with today's number would
-  // quietly poison the PnL.
-  async handleTrade(trade, { shadow = true, price: wantPrice = true } = {}) {
+  // `shadow: false` records the event without opening positions. `market:
+  // false` skips the DexScreener lookup, which backfill does because liquidity,
+  // market cap and pair age are all as-of-now readings and stamping today's
+  // values onto a week-old trade would quietly poison the data.
+  //
+  // The price itself is exempt from that: it comes out of the transaction, so
+  // it is as correct for an old trade as a new one and is always read.
+  async handleTrade(trade, { shadow = true, market = true } = {}) {
     const chain = this.chain(trade.chain_id);
+    const rpc = this.rpcs.get(trade.chain_id);
     const meta = await this.tokenMeta(trade.chain_id, trade.token);
     const amount = Number(BigInt(trade.amount_raw)) / 10 ** meta.decimals;
 
-    const quote = wantPrice ? await fetchPrice(chain, trade.token) : null;
-    const price = quote?.price ?? null;
+    const quote = market ? await fetchPrice(chain, trade.token) : null;
+
+    const settled = await settlement(rpc, chain, trade.tx_hash, trade.token).catch(() => null);
+    const execPrice = settled && amount > 0 ? settled.usd / amount : null;
+    const price = execPrice ?? quote?.price ?? null;
 
     const leaderFrac = await this.leaderFraction(
       trade.chain_id,
@@ -80,12 +88,15 @@ class Engine {
       amount,
       leader_frac: leaderFrac,
       price_usd: price,
-      // A size bigger than the whole coin is the pair-side bug, not a trade.
+      price_source: execPrice ? 'exec' : quote?.price ? 'dexscreener' : null,
+      // The settled amount is the trade, full stop. Only the estimated path
+      // needs guarding: a size bigger than the whole coin is a quote read off
+      // the wrong side of a pair, not a trade.
       size_usd: (() => {
-        if (!price) return null;
-        const size = amount * price;
-        const mcap = quote?.mcap;
-        if (mcap && size > mcap * 5) return null;
+        if (settled) return settled.usd;
+        if (!quote?.price) return null;
+        const size = amount * quote.price;
+        if (quote.mcap && size > quote.mcap * 5) return null;
         return size;
       })(),
       liquidity_usd: quote?.liquidity ?? null,
@@ -136,7 +147,10 @@ class Engine {
       });
     }
 
-    if (trade.side === 'sell') this.applyLeaderSell(row, price);
+    // Our exit is a $100 sale, theirs may be a $25k dump. Their fill includes
+    // slippage we would never pay, so mark the exit at the market price when we
+    // have one and only fall back to their fill.
+    if (trade.side === 'sell') this.applyLeaderSell(row, quote?.price ?? execPrice);
     else if (!muted) this.openShadowPositions(eventId, row, quote);
   }
 

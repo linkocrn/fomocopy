@@ -8,6 +8,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "backfill": "node scripts/backfill.js",
+    "reprice": "node scripts/reprice.js",
     "report": "node scripts/report.js"
   },
   "dependencies": {

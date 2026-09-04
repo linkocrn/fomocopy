@@ -137,6 +137,10 @@ function migrate(db) {
     change_h1: 'REAL',
     buys_h1: 'INTEGER',
     sells_h1: 'INTEGER',
+    // 'exec' means price_usd and size_usd came out of the leader's own
+    // settlement leg and are exact. 'dexscreener' means they are a spot quote,
+    // so treat them as an estimate. NULL means we never managed to price it.
+    price_source: 'TEXT',
   });
   addColumns(db, 'positions', {
     entry_liquidity_usd: 'REAL',
@@ -164,12 +168,12 @@ function statements(db) {
         (chain_id, block, log_index, tx_hash, ts, leader, side, token,
          amount_raw, amount, leader_frac, price_usd, size_usd, liquidity_usd, fdv_usd, mcap_usd,
          seen_ts, pair_created_at, pair_address, dex_id,
-         vol_h1, vol_h24, change_m5, change_h1, buys_h1, sells_h1)
+         vol_h1, vol_h24, change_m5, change_h1, buys_h1, sells_h1, price_source)
       VALUES
         (@chain_id, @block, @log_index, @tx_hash, @ts, @leader, @side, @token,
          @amount_raw, @amount, @leader_frac, @price_usd, @size_usd, @liquidity_usd, @fdv_usd, @mcap_usd,
          @seen_ts, @pair_created_at, @pair_address, @dex_id,
-         @vol_h1, @vol_h24, @change_m5, @change_h1, @buys_h1, @sells_h1)
+         @vol_h1, @vol_h24, @change_m5, @change_h1, @buys_h1, @sells_h1, @price_source)
     `),
     getToken: db.prepare('SELECT * FROM tokens WHERE chain_id = ? AND address = ?'),
     putToken: db.prepare('INSERT OR REPLACE INTO tokens (chain_id, address, symbol, decimals) VALUES (?, ?, ?, ?)'),

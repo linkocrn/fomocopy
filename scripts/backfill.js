@@ -39,7 +39,7 @@ async function main() {
 
     const watcher = new Watcher(chain, { onTrade: () => {}, cursor: { get: () => null, set: () => {} } });
     const found = await watcher.backfill(from, tip, (trade) =>
-      engine.handleTrade(trade, { shadow: false, price: false })
+      engine.handleTrade(trade, { shadow: false, market: false })
     );
     log.ok(`${chain.name}: ${found} trades recorded`);
   }
