@@ -267,4 +267,4 @@ class Bot {
   }
 }
 
-module.exports = { Bot, HELP };
+module.exports = { Bot, HELP, chunk };
