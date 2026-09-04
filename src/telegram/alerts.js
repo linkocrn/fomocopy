@@ -58,10 +58,6 @@ const sideIcon = (side) => (side === 'buy' ? '🟢' : '🔴');
 // Telegram copies <code> on tap in the mobile apps. The copy_text button does
 // the same on desktop, where tapping code only selects it.
 const walletLine = (addr) => (addr ? `<code>${addr}</code>` : null);
-const copyWallet = (addr) =>
-  addr
-    ? { reply_markup: { inline_keyboard: [[{ text: 'copy wallet', copy_text: { text: addr } }]] } }
-    : undefined;
 
 function makeAlerter(send) {
   const bursts = new Map();
@@ -113,7 +109,7 @@ function makeAlerter(send) {
   function flush(key) {
     const b = bursts.get(key);
     bursts.delete(key);
-    if (b && b.extras > 0) send(rollup(b), copyWallet(b.leaderAddr));
+    if (b && b.extras > 0) send(rollup(b));
   }
 
   return function alert(t) {
@@ -121,7 +117,7 @@ function makeAlerter(send) {
     const existing = bursts.get(key);
 
     if (!existing) {
-      send(single(t), copyWallet(t.leaderAddr));
+      send(single(t));
       bursts.set(key, {
         ...t,
         extras: 0,
