@@ -87,6 +87,21 @@ async function main() {
       (missing ? `, ${missing} with no settlement leg` : '')
   );
 
+  // A position stores the leader's fill at the time it was opened, and the
+  // entry-cost report is our fill measured against it. Leaving that as the old
+  // estimate while the event it came from is now exact would compare two
+  // different sources. Voided positions keep their bad numbers, since the point
+  // of voiding them was that nothing about them is trustworthy.
+  const sync = db.prepare(
+    `UPDATE positions
+     SET leader_price = (SELECT price_usd FROM events WHERE events.id = positions.open_event)
+     WHERE IFNULL(skip_reason, '') <> 'bad_price'
+       AND open_event IN (SELECT id FROM events WHERE price_source = 'exec')
+       AND leader_price IS NOT (SELECT price_usd FROM events WHERE events.id = positions.open_event)`
+  );
+  const synced = apply ? sync.run().changes : 0;
+  if (apply && synced) log.ok(`realigned leader fill on ${synced} position(s)`);
+
   db.close();
 }
 
