@@ -5,6 +5,7 @@
 
 const R = require('../report');
 const { POLICIES } = require('../../config/policy');
+const { LEADERS, icon } = require('../../config/leaders');
 
 const usd = (n) => (n == null ? '-' : `${n < 0 ? '-' : ''}$${Math.abs(n).toFixed(2)}`);
 const pct = (n) => (n == null ? '-' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`);
@@ -29,16 +30,25 @@ function leaders(db) {
   const rows = R.leaders(db, 15);
   if (!rows.length) return 'No trades recorded yet.';
   const body = rows
-    .map((r) => `${r.leader.slice(0, 16).padEnd(16)} ${String(r.n).padStart(3)}  ${String(r.buys).padStart(3)}b/${String(r.sells).padStart(3)}s  ${r.tokens}t`)
+    .map((r) => `${icon(r.leader)} ${r.leader.slice(0, 15).padEnd(15)} ${String(r.n).padStart(3)}  ${String(r.buys).padStart(3)}b/${String(r.sells).padStart(3)}s  ${r.tokens}t`)
     .join('\n');
   return `<b>Most active leaders</b>\n${pre(body)}`;
+}
+
+// The full emoji legend, for learning the mapping.
+function who() {
+  const body = LEADERS.map((l) => `${icon(l.handle)} ${l.handle}`).join('\n');
+  return `<b>Leader icons</b>\n<i>Derived from the handle, so they never change.</i>\n${pre(body)}`;
 }
 
 function clusters(db) {
   const rows = R.clusters(db, 10);
   if (!rows.length) return 'No token has been bought by more than one leader yet.';
   const body = rows
-    .map((r) => `${(r.symbol || r.token.slice(0, 10)).slice(0, 12).padEnd(12)} ${r.n}  ${r.who}`)
+    .map((r) => {
+      const icons = r.who.split(',').map((h) => icon(h.trim())).join('');
+      return `${(r.symbol || r.token.slice(0, 10)).slice(0, 12).padEnd(12)} ${icons}  ${r.who}`;
+    })
     .join('\n');
   return `<b>Tokens bought by multiple leaders</b>\nThe strongest signal in the data.\n${pre(body)}`;
 }
@@ -86,7 +96,7 @@ function positions(db) {
     .map((p) => {
       const live = p.last_price && p.entry_price ? (p.last_price / p.entry_price - 1) * 100 : null;
       const age = ((Date.now() - (p.entry_ts || p.opened_ts)) / 3_600_000).toFixed(1);
-      return `${(p.symbol || p.token.slice(0, 8)).slice(0, 10).padEnd(10)} ${p.leader.slice(0, 13).padEnd(13)} ${age.padStart(5)}h ${(live == null ? '-' : pct(live)).padStart(8)}`;
+      return `${icon(p.leader)} ${(p.symbol || p.token.slice(0, 8)).slice(0, 10).padEnd(10)} ${p.leader.slice(0, 12).padEnd(12)} ${age.padStart(5)}h ${(live == null ? '-' : pct(live)).padStart(8)}`;
     })
     .join('\n');
   return `<b>Open positions</b> <i>(${policy})</i>\n${pre(body)}`;
@@ -98,7 +108,7 @@ function perLeader(db) {
   const rows = R.perLeader(db, s.best.policy);
   if (!rows.length) return 'Nothing has closed yet.';
   const body = rows
-    .map((r) => `${r.leader.slice(0, 16).padEnd(16)} ${String(r.n).padStart(3)}  ${usd(r.total).padStart(10)}  ${pct(r.avg).padStart(7)}`)
+    .map((r) => `${icon(r.leader)} ${r.leader.slice(0, 15).padEnd(15)} ${String(r.n).padStart(3)}  ${usd(r.total).padStart(10)}  ${pct(r.avg).padStart(7)}`)
     .join('\n');
   return `<b>PnL per leader</b> <i>(${s.best.policy})</i>\n${pre(body)}`;
 }
@@ -114,4 +124,4 @@ function policies() {
   );
 }
 
-module.exports = { overview, leaders, clusters, scoreboard, positions, perLeader, policies, usd, pct, esc };
+module.exports = { overview, leaders, who, clusters, scoreboard, positions, perLeader, policies, usd, pct, esc };

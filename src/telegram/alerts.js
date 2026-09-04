@@ -8,6 +8,8 @@
 // worth reacting to, and everything after it is accumulated into a single
 // rollup sent once the burst goes quiet.
 
+const { icon } = require('../../config/leaders');
+
 const BURST_QUIET_MS = 90_000;
 
 // Compact form for context numbers like market cap and liquidity, where the
@@ -39,7 +41,7 @@ function makeAlerter(send) {
     if (t.liquidity) bits.push(`liq ${money(t.liquidity)}`);
 
     return [
-      `<b>${t.side.toUpperCase()}</b>  ${t.leader}`,
+      `${icon(t.leader)} <b>${t.side.toUpperCase()}</b>  ${t.leader}`,
       `<b>${t.symbol}</b>  ${t.sizeUsd ? `<b>${exact(t.sizeUsd)}</b>` : 'size unknown'}` +
         (t.fracOfBag != null ? `  ·  ${(t.fracOfBag * 100).toFixed(t.fracOfBag < 0.1 ? 1 : 0)}% of bag` : ''),
       bits.length ? `${t.chain.name}  ·  ${bits.join('  ·  ')}` : t.chain.name,
@@ -52,7 +54,7 @@ function makeAlerter(send) {
 
   function rollup(b) {
     return [
-      `<b>${b.side.toUpperCase()}</b>  ${b.leader} kept going`,
+      `${icon(b.leader)} <b>${b.side.toUpperCase()}</b>  ${b.leader} kept going`,
       `<b>${b.symbol}</b>  ${b.extras} more ${b.side}${b.extras === 1 ? '' : 's'}` +
         (b.totalUsd ? `  ·  <b>${exact(b.totalUsd)}</b> across ${b.extras + 1}` : ''),
       b.lastMcap ? `${b.chain.name}  ·  mcap now ${money(b.lastMcap)}` : b.chain.name,

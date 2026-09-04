@@ -57,4 +57,11 @@ const LEADERS = [
 const EVM_LEADERS = LEADERS.filter((l) => l.evm).map((l) => ({ ...l, evm: l.evm.toLowerCase() }));
 const BY_EVM = new Map(EVM_LEADERS.map((l) => [l.evm, l.handle]));
 
-module.exports = { LEADERS, EVM_LEADERS, BY_EVM };
+// A distinct emoji per leader, so a handle is recognisable at a glance. Derived
+// from the handle, so it is the same on every restart. Adding a leader can
+// shift another one's icon only if the two collide on the same slot.
+const { assign } = require('../src/util/icons');
+const ICONS = assign(LEADERS.map((l) => l.handle));
+const icon = (handle) => ICONS.get(handle) || '·';
+
+module.exports = { LEADERS, EVM_LEADERS, BY_EVM, ICONS, icon };

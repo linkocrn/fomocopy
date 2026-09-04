@@ -74,6 +74,12 @@ Alerts carry the exact dollar size, what share of their bag a sell was, market
 cap, liquidity, and links to the chart, the transaction, the wallet and the
 trader's FOMO profile.
 
+Each leader gets a distinct emoji derived from their handle, so they are
+recognisable at a glance in a fast scrolling feed where reading names is slower
+than seeing a shape. Forty handles into eighty slots collides almost every time,
+so the assignment probes forward from the hash to guarantee all forty are
+distinct while staying deterministic. `/who` prints the legend.
+
 Leaders scale in and out rather than trading once. `slingoor` unloaded MEME in
 fourteen separate transactions about fifteen seconds apart, which as raw alerts
 would be fourteen near-identical messages. So the first trade of a burst goes
@@ -87,6 +93,7 @@ Commands:
 | `/status` | what is running, uptime, block heights |
 | `/report` | policy scoreboard and entry cost |
 | `/leaders` | who is trading the most |
+| `/who` | the emoji legend for every leader |
 | `/pnl` | profit and loss per leader |
 | `/positions` | open shadow positions with live PnL |
 | `/clusters` | tokens several leaders bought |

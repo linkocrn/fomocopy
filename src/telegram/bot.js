@@ -15,6 +15,7 @@ const HELP = [
   '/status — what is running right now',
   '/report — the policy scoreboard and entry cost',
   '/leaders — who is trading the most',
+  '/who — the emoji legend for every leader',
   '/pnl — profit and loss per leader',
   '/positions — open shadow positions',
   '/clusters — tokens several leaders bought',
@@ -141,6 +142,9 @@ class Bot {
 
       case '/leaders':
         return reply(fmt.leaders(this.db));
+
+      case '/who':
+        return reply(fmt.who());
 
       case '/pnl':
         return reply(fmt.perLeader(this.db));
