@@ -55,6 +55,16 @@ async function fetchPrice(chain, token) {
         // diluted. For most of these launches the two are the same.
         mcap: pair.marketCap ?? pair.fdv ?? null,
         symbol: pair.baseToken?.symbol ?? null,
+        // Unix ms. Same field DexScreener shows as "created" on the pair page.
+        pairCreatedAt: pair.pairCreatedAt || null,
+        pairAddress: pair.pairAddress || null,
+        dexId: pair.dexId || null,
+        volH1: pair.volume?.h1 ?? null,
+        volH24: pair.volume?.h24 ?? null,
+        changeM5: pair.priceChange?.m5 ?? null,
+        changeH1: pair.priceChange?.h1 ?? null,
+        buysH1: pair.txns?.h1?.buys ?? null,
+        sellsH1: pair.txns?.h1?.sells ?? null,
       };
     } catch (e) {
       log.warn(`${token.slice(0, 10)} ${e.message}`);

@@ -123,7 +123,29 @@ function migrate(db) {
     );
   `);
 
-  addColumns(db, 'events', { mcap_usd: 'REAL' });
+  addColumns(db, 'events', {
+    mcap_usd: 'REAL',
+    // When we received the log, vs the block timestamp. The gap is the real
+    // copy delay. Cannot be reconstructed later.
+    seen_ts: 'INTEGER',
+    pair_created_at: 'INTEGER',
+    pair_address: 'TEXT',
+    dex_id: 'TEXT',
+    vol_h1: 'REAL',
+    vol_h24: 'REAL',
+    change_m5: 'REAL',
+    change_h1: 'REAL',
+    buys_h1: 'INTEGER',
+    sells_h1: 'INTEGER',
+  });
+  addColumns(db, 'positions', {
+    entry_liquidity_usd: 'REAL',
+    entry_mcap_usd: 'REAL',
+  });
+  addColumns(db, 'marks', {
+    liquidity_usd: 'REAL',
+    mcap_usd: 'REAL',
+  });
 }
 
 // CREATE TABLE IF NOT EXISTS does nothing to a table that already exists, so
@@ -140,10 +162,14 @@ function statements(db) {
     insertEvent: db.prepare(`
       INSERT OR IGNORE INTO events
         (chain_id, block, log_index, tx_hash, ts, leader, side, token,
-         amount_raw, amount, leader_frac, price_usd, size_usd, liquidity_usd, fdv_usd, mcap_usd)
+         amount_raw, amount, leader_frac, price_usd, size_usd, liquidity_usd, fdv_usd, mcap_usd,
+         seen_ts, pair_created_at, pair_address, dex_id,
+         vol_h1, vol_h24, change_m5, change_h1, buys_h1, sells_h1)
       VALUES
         (@chain_id, @block, @log_index, @tx_hash, @ts, @leader, @side, @token,
-         @amount_raw, @amount, @leader_frac, @price_usd, @size_usd, @liquidity_usd, @fdv_usd, @mcap_usd)
+         @amount_raw, @amount, @leader_frac, @price_usd, @size_usd, @liquidity_usd, @fdv_usd, @mcap_usd,
+         @seen_ts, @pair_created_at, @pair_address, @dex_id,
+         @vol_h1, @vol_h24, @change_m5, @change_h1, @buys_h1, @sells_h1)
     `),
     getToken: db.prepare('SELECT * FROM tokens WHERE chain_id = ? AND address = ?'),
     putToken: db.prepare('INSERT OR REPLACE INTO tokens (chain_id, address, symbol, decimals) VALUES (?, ?, ?, ?)'),
@@ -157,7 +183,12 @@ function statements(db) {
          @size_usd, 1.0, @status, @skip_reason)
     `),
     pendingEntries: db.prepare("SELECT * FROM positions WHERE status = 'pending' AND opened_ts <= ?"),
-    activate: db.prepare("UPDATE positions SET status = 'open', entry_price = ?, entry_ts = ? WHERE id = ?"),
+    activate: db.prepare(`
+      UPDATE positions
+      SET status = 'open', entry_price = ?, entry_ts = ?,
+          entry_liquidity_usd = ?, entry_mcap_usd = ?
+      WHERE id = ?
+    `),
     skip: db.prepare("UPDATE positions SET status = 'skipped', skip_reason = ? WHERE id = ?"),
     openPositions: db.prepare("SELECT * FROM positions WHERE status = 'open'"),
     openFor: db.prepare("SELECT * FROM positions WHERE status = 'open' AND chain_id = ? AND token = ? AND leader = ?"),
@@ -175,7 +206,10 @@ function statements(db) {
       VALUES (?, ?, ?, ?, ?, ?)
     `),
     fillsFor: db.prepare('SELECT * FROM fills WHERE position_id = ?'),
-    putMark: db.prepare('INSERT OR REPLACE INTO marks (position_id, offset_ms, ts, price, pnl_pct) VALUES (?, ?, ?, ?, ?)'),
+    putMark: db.prepare(`
+      INSERT OR REPLACE INTO marks (position_id, offset_ms, ts, price, pnl_pct, liquidity_usd, mcap_usd)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `),
     marksFor: db.prepare('SELECT offset_ms FROM marks WHERE position_id = ?'),
 
     getCursor: db.prepare('SELECT block FROM cursors WHERE chain_id = ?'),

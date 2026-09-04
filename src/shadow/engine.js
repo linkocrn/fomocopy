@@ -32,15 +32,19 @@ class Engine {
     return row;
   }
 
-  // A leader's sell tells us far more if we know what share of their bag it
-  // was. Their balance right after the sell gives us that exactly.
-  async leaderFraction(chainId, token, leaderAddr, amountRaw, block) {
+  // What share of the leader's bag this trade is. Sells: sold / (sold + left).
+  // Buys: bought / balance after, so a first entry is ~1 and an add is smaller.
+  async leaderFraction(chainId, token, leaderAddr, amountRaw, block, side) {
     try {
       const after = await this.rpcs.get(chainId).balanceOf(token, leaderAddr, block);
-      const sold = BigInt(amountRaw);
-      const total = sold + after;
+      const qty = BigInt(amountRaw);
+      if (side === 'buy') {
+        if (after === 0n) return 1;
+        return Number((qty * 10000n) / after) / 10000;
+      }
+      const total = qty + after;
       if (total === 0n) return 1;
-      return Number((sold * 10000n) / total) / 10000;
+      return Number((qty * 10000n) / total) / 10000;
     } catch {
       return null;
     }
@@ -58,16 +62,21 @@ class Engine {
     const quote = wantPrice ? await fetchPrice(chain, trade.token) : null;
     const price = quote?.price ?? null;
 
-    const leaderFrac =
-      trade.side === 'sell'
-        ? await this.leaderFraction(trade.chain_id, trade.token, trade.leader_addr, trade.amount_raw, trade.block)
-        : null;
+    const leaderFrac = await this.leaderFraction(
+      trade.chain_id,
+      trade.token,
+      trade.leader_addr,
+      trade.amount_raw,
+      trade.block,
+      trade.side
+    );
 
     const ts = (await this.rpcs.get(trade.chain_id).blockTimestamp(trade.block)) || Date.now();
 
     const row = {
       ...trade,
       ts,
+      seen_ts: Date.now(),
       amount,
       leader_frac: leaderFrac,
       price_usd: price,
@@ -75,6 +84,15 @@ class Engine {
       liquidity_usd: quote?.liquidity ?? null,
       fdv_usd: quote?.fdv ?? null,
       mcap_usd: quote?.mcap ?? null,
+      pair_created_at: quote?.pairCreatedAt ?? null,
+      pair_address: quote?.pairAddress ?? null,
+      dex_id: quote?.dexId ?? null,
+      vol_h1: quote?.volH1 ?? null,
+      vol_h24: quote?.volH24 ?? null,
+      change_m5: quote?.changeM5 ?? null,
+      change_h1: quote?.changeH1 ?? null,
+      buys_h1: quote?.buysH1 ?? null,
+      sells_h1: quote?.sellsH1 ?? null,
     };
     delete row.leader_addr;
 
@@ -107,6 +125,7 @@ class Engine {
         fracOfBag: leaderFrac,
         mcap: row.mcap_usd,
         liquidity: row.liquidity_usd,
+        pairCreatedAt: quote?.pairCreatedAt ?? null,
       });
     }
 
@@ -181,7 +200,7 @@ class Engine {
         this.st.skip.run('no_entry_price', position.id);
         continue;
       }
-      this.st.activate.run(quote.price, now, position.id);
+      this.st.activate.run(quote.price, now, quote.liquidity ?? null, quote.mcap ?? null, position.id);
       this.st.addFill.run(position.id, now, 0, quote.price, 'entry', 0);
     }
 
@@ -229,7 +248,7 @@ class Engine {
       for (const { position, age, due } of items) {
         for (const offset of due) {
           const pct = position.entry_price ? (quote.price / position.entry_price - 1) * 100 : null;
-          this.st.putMark.run(position.id, offset, now, quote.price, pct);
+          this.st.putMark.run(position.id, offset, now, quote.price, pct, quote.liquidity ?? null, quote.mcap ?? null);
         }
 
         onPriceTick(ctx, position, quote.price, now);
