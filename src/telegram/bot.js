@@ -33,7 +33,10 @@ class Bot {
     this.st = st;
     this.db = db;
     this.state = state; // { startedAt, chains, watchers }
-    this.offset = 0;
+    // Persisted, because getUpdates replays anything unconfirmed. Under
+    // `npm run dev` the process restarts on every file save, and a fresh
+    // offset would make the bot answer the same command again after each one.
+    this.offset = Number(st.getSetting.get('tg_offset')?.value || 0);
     this.stopped = false;
     this.queue = Promise.resolve();
     this.owner = st.getSetting.get('owner_chat_id')?.value || process.env.TELEGRAM_CHAT_ID || null;
@@ -93,8 +96,18 @@ class Bot {
           signal: AbortSignal.timeout(40_000),
         });
         const json = await res.json();
+
+        // Two processes cannot long-poll the same bot. This happens for a
+        // moment during a --watch restart while the old one is still winding
+        // down, and resolves itself, so it is not worth shouting about.
+        if (json.error_code === 409) {
+          await new Promise((r) => setTimeout(r, 1500));
+          continue;
+        }
+
         for (const update of json.result || []) {
           this.offset = update.update_id + 1;
+          this.st.setSetting.run('tg_offset', String(this.offset));
           const msg = update.message;
           if (msg?.text) await this.handle(msg);
         }

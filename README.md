@@ -57,8 +57,15 @@ endpoint such as QuickNode does.
 ```bash
 npm run backfill        # record recent history so the report has data today
 npm start               # watch live
+npm run dev             # same, but restarts itself whenever a file changes
 npm run report          # read the results
 ```
+
+`npm run dev` uses Node's built-in `--watch`, so editing any source file
+restarts the process without touching the terminal. A restart costs about a
+second and the watcher gap-fills whatever blocks it missed, so nothing is lost.
+Use plain `npm start` on a server, where you do not want a stray file write to
+bounce the process.
 
 `npm run backfill [blocks]` records events only. It does not open shadow
 positions, because DexScreener serves current prices and pricing a week-old trade
