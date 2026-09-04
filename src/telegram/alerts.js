@@ -27,10 +27,7 @@ const money = (n) => {
 // are actually looking at.
 const exact = (n) => (n == null ? null : `$${Math.round(n).toLocaleString('en-US')}`);
 
-// fomo.family is a client-rendered app that returns the same HTML for every
-// path, so the profile URL cannot be verified from the server. This is the
-// likely pattern; change it here if it turns out to be wrong.
-const fomoProfile = (handle) => `https://fomo.family/${handle}`;
+const fomoProfile = (handle) => `https://fomo.family/profile/${handle}`;
 
 function makeAlerter(send) {
   const bursts = new Map();
