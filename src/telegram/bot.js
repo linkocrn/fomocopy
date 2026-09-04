@@ -40,7 +40,7 @@ class Bot {
     this.stopped = false;
     this.queue = Promise.resolve();
     this.owner = st.getSetting.get('owner_chat_id')?.value || process.env.TELEGRAM_CHAT_ID || null;
-    this.alerter = makeAlerter((text) => this.send(text));
+    this.alerter = makeAlerter((text, extra) => this.send(text, extra));
   }
 
   get paused() {
@@ -49,7 +49,11 @@ class Bot {
 
   // Serialised with a gap so a burst of leader trades cannot trip Telegram's
   // rate limit and drop messages.
-  send(text, chatId = this.owner) {
+  send(text, chatId = this.owner, extra = {}) {
+    if (chatId && typeof chatId === 'object') {
+      extra = chatId;
+      chatId = this.owner;
+    }
     if (!chatId) return;
     this.queue = this.queue
       .then(() =>
@@ -61,6 +65,7 @@ class Bot {
             text,
             parse_mode: 'HTML',
             disable_web_page_preview: true,
+            ...(extra.reply_markup ? { reply_markup: extra.reply_markup } : {}),
           }),
         }).then(async (r) => {
           if (!r.ok) log.warn(`sendMessage ${r.status}: ${(await r.text()).slice(0, 160)}`);

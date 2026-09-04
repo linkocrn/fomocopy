@@ -54,6 +54,14 @@ const twitterProfile = (handle) => `https://x.com/${handle}`;
 // anything. The leader icon then sits next to the handle it belongs to.
 const sideIcon = (side) => (side === 'buy' ? '🟢' : '🔴');
 
+// Telegram copies <code> on tap in the mobile apps. The copy_text button does
+// the same on desktop, where tapping code only selects it.
+const walletLine = (addr) => (addr ? `<code>${addr}</code>` : null);
+const copyWallet = (addr) =>
+  addr
+    ? { reply_markup: { inline_keyboard: [[{ text: 'copy wallet', copy_text: { text: addr } }]] } }
+    : undefined;
+
 function makeAlerter(send) {
   const bursts = new Map();
 
@@ -71,12 +79,15 @@ function makeAlerter(send) {
           ? `  ·  ${(t.fracOfBag * 100).toFixed(t.fracOfBag < 0.1 ? 1 : 0)}% of bag`
           : ''),
       bits.length ? `${t.chain.name}  ·  ${bits.join('  ·  ')}` : t.chain.name,
+      walletLine(t.leaderAddr),
       `<a href="https://dexscreener.com/${t.chain.dexscreener}/${t.token}">chart</a>` +
         ` · <a href="${t.chain.explorer}/tx/${t.txHash}">tx</a>` +
         ` · <a href="${t.chain.explorer}/address/${t.leaderAddr}">wallet</a>` +
         ` · <a href="${fomoProfile(t.leader)}">fomo</a>` +
         ` · <a href="${twitterProfile(t.leader)}">twitter</a>`,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   function rollup(b) {
@@ -87,16 +98,19 @@ function makeAlerter(send) {
       [b.chain.name, b.lastMcap ? `mcap now ${money(b.lastMcap)}` : null, pairAge(b.pairCreatedAt)]
         .filter(Boolean)
         .join('  ·  '),
+      walletLine(b.leaderAddr),
       `<a href="https://dexscreener.com/${b.chain.dexscreener}/${b.token}">chart</a>` +
         ` · <a href="${fomoProfile(b.leader)}">fomo</a>` +
         ` · <a href="${twitterProfile(b.leader)}">twitter</a>`,
-    ].join('\n');
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   function flush(key) {
     const b = bursts.get(key);
     bursts.delete(key);
-    if (b && b.extras > 0) send(rollup(b));
+    if (b && b.extras > 0) send(rollup(b), copyWallet(b.leaderAddr));
   }
 
   return function alert(t) {
@@ -104,7 +118,7 @@ function makeAlerter(send) {
     const existing = bursts.get(key);
 
     if (!existing) {
-      send(single(t));
+      send(single(t), copyWallet(t.leaderAddr));
       bursts.set(key, {
         ...t,
         extras: 0,
