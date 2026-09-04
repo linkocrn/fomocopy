@@ -1,0 +1,20 @@
+{
+  "name": "fomocopy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shadow copy-trading tracker for FOMO leader wallets on Robinhood Chain and Base",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "backfill": "node scripts/backfill.js",
+    "report": "node scripts/report.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.5.0",
+    "dotenv": "^16.4.5",
+    "ws": "^8.18.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
