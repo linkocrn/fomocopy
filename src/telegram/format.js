@@ -5,7 +5,9 @@
 
 const R = require('../report');
 const { POLICIES } = require('../../config/policy');
+const { CHAINS } = require('../../config/chains');
 const { LEADERS, icon } = require('../../config/leaders');
+const { money, exact } = require('./alerts');
 
 const usd = (n) => (n == null ? '-' : `${n < 0 ? '-' : ''}$${Math.abs(n).toFixed(2)}`);
 const pct = (n) => (n == null ? '-' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`);
@@ -200,6 +202,79 @@ function oneLeader(db, arg) {
     out.push('<i>No shadow positions. Either they have not bought since we started, or every buy was skipped.</i>');
   }
   out.push('<i>Each line is one copied buy at $100. Open dollars can vanish.</i>');
+  out.push(`<i>/pnl ${esc(handle)} MEME for that coin's tape.</i>`);
+  return out.join('\n');
+}
+
+function ageShort(ts) {
+  const s = Math.max(0, (Date.now() - ts) / 1000);
+  if (s < 60) return `${Math.max(1, Math.round(s))}s`;
+  if (s < 3600) return `${Math.round(s / 60)}m`;
+  if (s < 48 * 3600) return `${(s / 3600).toFixed(1)}h`;
+  return `${(s / 86400).toFixed(1)}d`;
+}
+
+function oneToken(db, handleArg, tokenArg) {
+  const handle = R.resolveLeader(db, handleArg);
+  if (!handle) return `No leader called <b>${esc(handleArg)}</b>. Try /who or /leaders.`;
+
+  const hits = R.resolveLeaderToken(db, handle, tokenArg);
+  if (!hits.length) {
+    const known = R.leaderTokens(db, handle)
+      .map((t) => t.symbol || t.token.slice(0, 8))
+      .slice(0, 12);
+    return (
+      `${icon(handle)} <b>${esc(handle)}</b> has no tape for <b>${esc(tokenArg)}</b>.` +
+      (known.length ? `\nTokens: ${known.map(esc).join(', ')}` : '')
+    );
+  }
+
+  const out = [`${icon(handle)} <b>${esc(handle)}</b>`];
+
+  for (const hit of hits) {
+    const chain = CHAINS[hit.chain_id];
+    const sym = hit.symbol || hit.token.slice(0, 8);
+    const events = R.leaderTokenEvents(db, handle, hit.chain_id, hit.token);
+    const copies = R.leaderPositions(db, handle, 'hold_24h').filter(
+      (p) => p.chain_id === hit.chain_id && p.token === hit.token
+    );
+
+    out.push('');
+    out.push(`<b>${esc(sym)}</b> · ${chain ? esc(chain.name) : hit.chain_id} · ${hit.buys}b/${hit.sells}s`);
+    const tape = events.map((e) => {
+      const bits = [ageShort(e.ts).padStart(5), e.side === 'buy' ? 'BUY ' : 'SELL', (exact(e.size_usd) || '?').padStart(8)];
+      if (e.leader_frac != null) bits.push(`${(e.leader_frac * 100).toFixed(e.leader_frac < 0.1 ? 1 : 0)}%`);
+      if (e.mcap_usd) bits.push(money(e.mcap_usd));
+      return bits.join('  ');
+    });
+    out.push(pre(tape.join('\n')));
+
+    if (copies.length) {
+      const copyLines = copies.map((p) => {
+        const live =
+          p.status === 'closed'
+            ? { usd: p.pnl_usd, pct: p.pnl_pct }
+            : p.entry_price && p.last_price
+              ? {
+                  usd: p.size_usd * (p.qty || 0) * (p.last_price / p.entry_price - 1),
+                  pct: (p.last_price / p.entry_price - 1) * 100,
+                }
+              : { usd: null, pct: null };
+        const st = p.status === 'open' ? 'opn' : p.status === 'closed' ? 'cls' : 'skp';
+        const why = p.exit_reason || p.skip_reason || '';
+        return `${st}  ${usd(live.usd).padStart(9)}  ${pct(live.pct).padStart(7)}  ${why}`.trimEnd();
+      });
+      out.push(`<i>Our $100 copy (hold_24h)</i>\n${pre(copyLines.join('\n'))}`);
+    }
+
+    if (chain) {
+      out.push(
+        `<a href="https://dexscreener.com/${chain.dexscreener}/${hit.token}">chart</a>` +
+          ` · <a href="https://fomo.family/tokens/${chain.slug}/${hit.token}">fomo chart</a>`
+      );
+    }
+  }
+
   return out.join('\n');
 }
 
@@ -214,4 +289,4 @@ function policies() {
   );
 }
 
-module.exports = { overview, leaders, who, clusters, scoreboard, positions, perLeader, oneLeader, policies, usd, pct, esc };
+module.exports = { overview, leaders, who, clusters, scoreboard, positions, perLeader, oneLeader, oneToken, policies, usd, pct, esc };

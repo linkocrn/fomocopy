@@ -187,6 +187,51 @@ function leaderPositions(db, handle, policy) {
     .all(handle, policy);
 }
 
+function leaderTokens(db, handle) {
+  return db
+    .prepare(
+      `SELECT e.chain_id, e.token,
+              MAX(t.symbol) symbol,
+              COUNT(*) n,
+              SUM(e.side = 'buy') buys,
+              SUM(e.side = 'sell') sells
+       FROM events e
+       LEFT JOIN tokens t ON t.chain_id = e.chain_id AND t.address = e.token
+       WHERE e.leader = ?
+       GROUP BY e.chain_id, e.token
+       ORDER BY MAX(e.ts) DESC`
+    )
+    .all(handle);
+}
+
+function resolveLeaderToken(db, handle, arg) {
+  const needle = String(arg || '').trim().toLowerCase();
+  if (!needle) return [];
+  return leaderTokens(db, handle).filter((r) => {
+    const sym = (r.symbol || '').toLowerCase();
+    const addr = r.token.toLowerCase();
+    return (
+      addr === needle ||
+      addr.startsWith(needle) ||
+      sym === needle ||
+      (needle.length >= 2 && sym.startsWith(needle))
+    );
+  });
+}
+
+function leaderTokenEvents(db, handle, chainId, token, limit = 40) {
+  return db
+    .prepare(
+      `SELECT ts, side, size_usd, leader_frac, mcap_usd, liquidity_usd, tx_hash, log_index
+       FROM events
+       WHERE leader = ? AND chain_id = ? AND token = ?
+       ORDER BY ts DESC, log_index DESC
+       LIMIT ?`
+    )
+    .all(handle, chainId, token, limit)
+    .reverse();
+}
+
 function resolveLeader(db, arg) {
   const needle = String(arg || '').replace(/^@/, '').trim().toLowerCase();
   if (!needle) return null;
@@ -217,6 +262,9 @@ module.exports = {
   leaderActivity,
   leaderPositions,
   resolveLeader,
+  leaderTokens,
+  resolveLeaderToken,
+  leaderTokenEvents,
   exitReasons,
   skips,
   openPositions,

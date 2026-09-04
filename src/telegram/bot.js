@@ -16,7 +16,7 @@ const HELP = [
   '/report — the policy scoreboard and entry cost',
   '/leaders — who is trading the most',
   '/who — the emoji legend for every leader',
-  '/pnl — all leaders. /pnl handle for one trader\'s book',
+  '/pnl — all leaders. /pnl handle or /pnl handle TOKEN for the tape',
   '/positions — open shadow positions',
   '/clusters — tokens several leaders bought',
   '/policies — what the five exit strategies do',
@@ -164,8 +164,12 @@ class Bot {
       case '/who':
         return reply(fmt.who());
 
-      case '/pnl':
-        return reply(arg ? fmt.oneLeader(this.db, arg) : fmt.perLeader(this.db));
+      case '/pnl': {
+        if (!arg) return reply(fmt.perLeader(this.db));
+        const [who, ...tokenBits] = rest;
+        const tokenArg = tokenBits.join(' ').trim();
+        return reply(tokenArg ? fmt.oneToken(this.db, who, tokenArg) : fmt.oneLeader(this.db, who));
+      }
 
       case '/positions':
         return reply(fmt.positions(this.db));
