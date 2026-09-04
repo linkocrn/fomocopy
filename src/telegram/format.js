@@ -241,6 +241,11 @@ function oneToken(db, handleArg, tokenArg) {
 
     out.push('');
     out.push(`<b>${esc(sym)}</b> · ${chain ? esc(chain.name) : hit.chain_id} · ${hit.buys}b/${hit.sells}s`);
+    if (events[0]?.side === 'sell') {
+      out.push(
+        '<i>Tape starts on a sell. The bag was already open (bought before we watched, or a buy that skipped the FOMO vault). This is the exit, not the trade.</i>'
+      );
+    }
     const tape = events.map((e) => {
       const bits = [ageShort(e.ts).padStart(5), e.side === 'buy' ? 'BUY ' : 'SELL', (exact(e.size_usd) || '?').padStart(8)];
       if (e.leader_frac != null) bits.push(`${(e.leader_frac * 100).toFixed(e.leader_frac < 0.1 ? 1 : 0)}%`);
