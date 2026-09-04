@@ -16,7 +16,7 @@ const HELP = [
   '/report — the policy scoreboard and entry cost',
   '/leaders — who is trading the most',
   '/who — the emoji legend for every leader',
-  '/pnl — per leader, closed score and open mark-to-market',
+  '/pnl — all leaders. /pnl handle for one trader\'s book',
   '/positions — open shadow positions',
   '/clusters — tokens several leaders bought',
   '/policies — what the five exit strategies do',
@@ -165,7 +165,7 @@ class Bot {
         return reply(fmt.who());
 
       case '/pnl':
-        return reply(fmt.perLeader(this.db));
+        return reply(arg ? fmt.oneLeader(this.db, arg) : fmt.perLeader(this.db));
 
       case '/positions':
         return reply(fmt.positions(this.db));

@@ -5,6 +5,7 @@
 
 const { CHAINS } = require('../config/chains');
 const { POLICIES, ENTRY } = require('../config/policy');
+const { LEADERS } = require('../config/leaders');
 
 function median(xs) {
   if (!xs.length) return null;
@@ -161,6 +162,39 @@ function skips(db) {
     .all();
 }
 
+function leaderActivity(db, handle) {
+  return db
+    .prepare(
+      `SELECT COUNT(*) n, SUM(side = 'buy') buys, SUM(side = 'sell') sells,
+              COUNT(DISTINCT token) tokens, COUNT(DISTINCT chain_id) chains
+       FROM events WHERE leader = ?`
+    )
+    .get(handle);
+}
+
+function leaderPositions(db, handle, policy) {
+  return db
+    .prepare(
+      `SELECT p.status, p.qty, p.size_usd, p.entry_price, p.leader_price,
+              p.opened_ts, p.entry_ts, p.exit_ts, p.exit_reason, p.pnl_usd, p.pnl_pct,
+              p.skip_reason, p.chain_id, p.token,
+              (SELECT symbol FROM tokens t WHERE t.chain_id = p.chain_id AND t.address = p.token) symbol,
+              (SELECT price FROM marks m WHERE m.position_id = p.id ORDER BY offset_ms DESC LIMIT 1) last_price
+       FROM positions p
+       WHERE p.leader = ? AND p.policy = ?
+       ORDER BY p.opened_ts DESC`
+    )
+    .all(handle, policy);
+}
+
+function resolveLeader(db, arg) {
+  const needle = String(arg || '').replace(/^@/, '').trim().toLowerCase();
+  if (!needle) return null;
+  const fromEvents = db.prepare('SELECT DISTINCT leader FROM events').all().map((r) => r.leader);
+  const names = [...new Set([...LEADERS.map((l) => l.handle), ...fromEvents])];
+  return names.find((h) => h.toLowerCase() === needle) || null;
+}
+
 function openPositions(db, policy = 'hold_24h', limit = 20) {
   return db
     .prepare(
@@ -180,6 +214,9 @@ module.exports = {
   scoreboard,
   perLeader,
   perLeaderOpen,
+  leaderActivity,
+  leaderPositions,
+  resolveLeader,
   exitReasons,
   skips,
   openPositions,

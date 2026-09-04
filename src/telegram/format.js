@@ -136,6 +136,73 @@ function perLeader(db) {
   return out.join('\n');
 }
 
+function oneLeader(db, arg) {
+  const handle = R.resolveLeader(db, arg);
+  if (!handle) return `No leader called <b>${esc(arg)}</b>. Try /who or /leaders.`;
+
+  const act = R.leaderActivity(db, handle);
+  const s = R.scoreboard(db);
+  const closedPolicy = s.best?.policy || 'hold_24h';
+  const hold = R.leaderPositions(db, handle, 'hold_24h');
+  const scored = closedPolicy === 'hold_24h' ? [] : R.leaderPositions(db, handle, closedPolicy).filter((p) => p.status === 'closed');
+
+  const livePnl = (p) => {
+    if (p.status === 'closed') return { usd: p.pnl_usd, pct: p.pnl_pct };
+    if (p.status === 'open' && p.entry_price && p.last_price) {
+      const pctV = (p.last_price / p.entry_price - 1) * 100;
+      return { usd: p.size_usd * (p.qty || 0) * (p.last_price / p.entry_price - 1), pct: pctV };
+    }
+    return { usd: null, pct: null };
+  };
+
+  const line = (p) => {
+    const { usd: u, pct: pc } = livePnl(p);
+    const ageMs = Date.now() - (p.entry_ts || p.opened_ts);
+    const age = `${(ageMs / 3_600_000).toFixed(1)}h`;
+    const st = p.status === 'open' ? 'opn' : p.status === 'closed' ? 'cls' : 'skp';
+    const why = p.status === 'closed' ? (p.exit_reason || '') : p.status === 'skipped' ? (p.skip_reason || '') : '';
+    return `${(p.symbol || p.token.slice(0, 8)).slice(0, 10).padEnd(10)} ${st} ${age.padStart(5)} ${usd(u).padStart(9)} ${pct(pc).padStart(7)} ${why}`.trimEnd();
+  };
+
+  const open = hold.filter((p) => p.status === 'open');
+  const closed = hold.filter((p) => p.status === 'closed');
+  const skipped = hold.filter((p) => p.status === 'skipped');
+
+  const out = [
+    `${icon(handle)} <b>${esc(handle)}</b>`,
+    `${act.n || 0} trades · ${act.buys || 0}b/${act.sells || 0}s · ${act.tokens || 0} tokens`,
+    '',
+  ];
+
+  if (open.length) {
+    out.push('<b>Open</b> <i>(hold_24h, live mark)</i>');
+    out.push(pre(open.map(line).join('\n')));
+    out.push('');
+  }
+  if (closed.length) {
+    out.push('<b>Closed</b> <i>(hold_24h)</i>');
+    out.push(pre(closed.map(line).join('\n')));
+    out.push('');
+  }
+  if (scored.length) {
+    out.push(`<b>Closed</b> <i>(${closedPolicy}, the current score)</i>`);
+    out.push(pre(scored.map(line).join('\n')));
+    out.push('');
+  }
+  if (skipped.length) {
+    out.push(`<b>Skipped</b> <i>${skipped.length} copies never opened</i>`);
+    const why = {};
+    for (const p of skipped) why[p.skip_reason || '?'] = (why[p.skip_reason || '?'] || 0) + 1;
+    out.push(Object.entries(why).map(([k, n]) => `${esc(k)} × ${n}`).join(' · '));
+    out.push('');
+  }
+  if (!open.length && !closed.length && !scored.length) {
+    out.push('<i>No shadow positions. Either they have not bought since we started, or every buy was skipped.</i>');
+  }
+  out.push('<i>Each line is one copied buy at $100. Open dollars can vanish.</i>');
+  return out.join('\n');
+}
+
 function policies() {
   const body = Object.entries(POLICIES)
     .map(([name, r]) => `${name.padEnd(15)} ${r.onLeaderSell}${r.trailPct ? ` @${r.trailPct}%` : ''}`)
@@ -147,4 +214,4 @@ function policies() {
   );
 }
 
-module.exports = { overview, leaders, who, clusters, scoreboard, positions, perLeader, policies, usd, pct, esc };
+module.exports = { overview, leaders, who, clusters, scoreboard, positions, perLeader, oneLeader, policies, usd, pct, esc };
