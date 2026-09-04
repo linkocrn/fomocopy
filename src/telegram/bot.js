@@ -8,23 +8,51 @@ const { makeAlerter } = require('./alerts');
 const log = logger('telegram');
 const API = (token, method) => `https://api.telegram.org/bot${token}/${method}`;
 
+// Telegram hard-rejects a message over 4096 characters and the failure is a
+// silent 400, so a long report would simply never arrive. Split on line
+// boundaries, and never inside a <pre>, since a half-open tag breaks the
+// message that carries it.
+const LIMIT = 3800;
+
+function chunk(text, limit = LIMIT) {
+  if (text.length <= limit) return [text];
+
+  const out = [];
+  let buf = '';
+  let depth = 0;
+
+  for (const line of text.split('\n')) {
+    if (depth === 0 && buf && buf.length + 1 + line.length > limit) {
+      out.push(buf);
+      buf = '';
+    }
+    buf = buf ? `${buf}\n${line}` : line;
+    depth += (line.match(/<pre>/g) || []).length - (line.match(/<\/pre>/g) || []).length;
+  }
+  if (buf) out.push(buf);
+
+  // A single <pre> longer than the cap cannot be split safely on lines, so cut
+  // it bluntly rather than let Telegram drop the message.
+  return out.flatMap((p) => (p.length <= 4096 ? p : p.match(/[\s\S]{1,4000}/g)));
+}
+
 const HELP = [
-  '<b>FOMO Copy</b> — shadow mode',
+  '<b>FOMO Copy</b> · shadow mode',
   'Nothing is executed and no keys are loaded. This only watches and simulates.',
   '',
-  '/status — what is running right now',
-  '/report — the policy scoreboard and entry cost',
-  '/leaders — who is trading the most',
-  '/who — the emoji legend for every leader',
-  '/pnl — all leaders. /pnl handle or /pnl handle TOKEN for the tape',
-  '/positions — open shadow positions',
-  '/clusters — tokens several leaders bought',
-  '/policies — what the five exit strategies do',
+  '/status · what is running right now',
+  '/report · the policy scoreboard and entry cost',
+  '/leaders · who is trading the most',
+  '/who · the emoji legend for every leader',
+  '/pnl · all leaders. /pnl handle or /pnl handle TOKEN for the tape',
+  '/positions · open shadow positions',
+  '/clusters · tokens several leaders bought',
+  '/policies · what the five exit strategies do',
   '',
-  '/mute &lt;handle&gt; — stop alerting and stop copying them',
-  '/unmute &lt;handle&gt; — resume',
-  '/muted — who is muted',
-  '/pause · /resume — all alerts',
+  '/mute &lt;handle&gt; · stop alerting and stop copying them',
+  '/unmute &lt;handle&gt; · resume',
+  '/muted · who is muted',
+  '/pause · /resume · all alerts',
 ].join('\n');
 
 class Bot {
@@ -48,31 +76,37 @@ class Bot {
   }
 
   // Serialised with a gap so a burst of leader trades cannot trip Telegram's
-  // rate limit and drop messages.
+  // rate limit and drop messages. Anything over the length cap is split first,
+  // otherwise the whole reply is dropped with only a warning in the log.
   send(text, chatId = this.owner, extra = {}) {
     if (chatId && typeof chatId === 'object') {
       extra = chatId;
       chatId = this.owner;
     }
     if (!chatId) return;
-    this.queue = this.queue
-      .then(() =>
-        fetch(API(this.token, 'sendMessage'), {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            chat_id: chatId,
-            text,
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            ...(extra.reply_markup ? { reply_markup: extra.reply_markup } : {}),
-          }),
-        }).then(async (r) => {
-          if (!r.ok) log.warn(`sendMessage ${r.status}: ${(await r.text()).slice(0, 160)}`);
-        })
-      )
-      .then(() => new Promise((r) => setTimeout(r, 1100)))
-      .catch((e) => log.warn(e.message));
+
+    const parts = chunk(text);
+    for (const [i, part] of parts.entries()) {
+      this.queue = this.queue
+        .then(() =>
+          fetch(API(this.token, 'sendMessage'), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: chatId,
+              text: part,
+              parse_mode: 'HTML',
+              disable_web_page_preview: true,
+              // Buttons belong on the last part, where the reader ends up.
+              ...(extra.reply_markup && i === parts.length - 1 ? { reply_markup: extra.reply_markup } : {}),
+            }),
+          }).then(async (r) => {
+            if (!r.ok) log.warn(`sendMessage ${r.status}: ${(await r.text()).slice(0, 160)}`);
+          })
+        )
+        .then(() => new Promise((r) => setTimeout(r, 1100)))
+        .catch((e) => log.warn(e.message));
+    }
     return this.queue;
   }
 

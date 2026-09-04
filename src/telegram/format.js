@@ -195,7 +195,7 @@ function oneLeader(db, arg) {
     const age = ((Date.now() - Math.min(...group.map((x) => x.entry_ts || x.opened_ts))) / 3_600_000).toFixed(1);
 
     const context = [
-      `${group.length} copy${group.length === 1 ? '' : 's'}`,
+      `${group.length} ${group.length === 1 ? 'copy' : 'copies'}`,
       `${age}h`,
       money(p.last_liquidity_usd ?? p.entry_liquidity_usd) ? `liq ${money(p.last_liquidity_usd ?? p.entry_liquidity_usd)}` : null,
       money(p.last_mcap_usd ?? p.entry_mcap_usd) ? `mcap ${money(p.last_mcap_usd ?? p.entry_mcap_usd)}` : null,
@@ -270,8 +270,10 @@ function oneLeader(db, arg) {
   if (!open.length && !closed.length && !scored.length) {
     out.push('<i>No shadow positions. Either they have not bought since we started, or every buy was skipped.</i>');
   }
-  out.push('<i>Each line is one copied buy at $100. Open dollars can vanish.</i>');
-  out.push(`<i>/pnl ${esc(handle)} MEME for that coin's tape.</i>`);
+  out.push('<i>Each copy is one $100 buy. Open dollars can vanish.</i>');
+  // Name a coin they actually hold, so the hint is runnable as printed.
+  const example = (open[0] || closed[0] || hold[0])?.symbol;
+  if (example) out.push(`<code>/pnl ${esc(handle)} ${esc(example)}</code> for that coin's tape.`);
   return out.join('\n');
 }
 
