@@ -113,6 +113,34 @@ function perLeader(db, policy) {
     .all(policy);
 }
 
+// Mark-to-market on still-open copies. Uses the latest stored mark, so a
+// runner that has not closed yet still shows up. This is not the score.
+function perLeaderOpen(db, policy) {
+  return db
+    .prepare(
+      `SELECT p.leader,
+              COUNT(*) n,
+              SUM(
+                CASE WHEN p.entry_price > 0 AND m.price IS NOT NULL
+                  THEN p.size_usd * p.qty * (m.price / p.entry_price - 1)
+                END
+              ) total,
+              AVG(
+                CASE WHEN p.entry_price > 0 AND m.price IS NOT NULL
+                  THEN (m.price / p.entry_price - 1) * 100
+                END
+              ) avg
+       FROM positions p
+       LEFT JOIN marks m
+         ON m.position_id = p.id
+        AND m.offset_ms = (SELECT MAX(offset_ms) FROM marks WHERE position_id = p.id)
+       WHERE p.policy = ? AND p.status = 'open'
+       GROUP BY p.leader
+       ORDER BY (total IS NULL), total DESC`
+    )
+    .all(policy);
+}
+
 function exitReasons(db, policy) {
   return db
     .prepare(
@@ -151,6 +179,7 @@ module.exports = {
   entryCost,
   scoreboard,
   perLeader,
+  perLeaderOpen,
   exitReasons,
   skips,
   openPositions,

@@ -16,7 +16,7 @@ const HELP = [
   '/report — the policy scoreboard and entry cost',
   '/leaders — who is trading the most',
   '/who — the emoji legend for every leader',
-  '/pnl — profit and loss per leader',
+  '/pnl — per leader, closed score and open mark-to-market',
   '/positions — open shadow positions',
   '/clusters — tokens several leaders bought',
   '/policies — what the five exit strategies do',

@@ -68,7 +68,7 @@ if (s.best) {
     console.log('  The baseline wins, which means the exit rules are not adding anything yet.');
   }
 
-  bar(`Per-leader PnL under ${s.best.policy}`);
+  bar(`Closed per-leader PnL under ${s.best.policy}`);
   for (const r of R.perLeader(db, s.best.policy)) {
     console.log(`  ${r.leader.padEnd(18)} ${String(r.n).padStart(3)} trades  ${usd(r.total).padStart(10)}  ${pct(r.avg).padStart(8)}`);
   }
@@ -77,6 +77,13 @@ if (s.best) {
   for (const r of R.exitReasons(db, s.best.policy)) {
     console.log(`  ${(r.exit_reason || '?').padEnd(22)} ${String(r.n).padStart(4)}  ${usd(r.total)}`);
   }
+}
+
+bar('Open per-leader PnL under hold_24h (live mark, not the score)');
+const openLeaders = R.perLeaderOpen(db, 'hold_24h');
+if (!openLeaders.length) console.log('  none');
+for (const r of openLeaders) {
+  console.log(`  ${r.leader.padEnd(18)} ${String(r.n).padStart(3)} trades  ${usd(r.total).padStart(10)}  ${pct(r.avg).padStart(8)}`);
 }
 
 const skips = R.skips(db);

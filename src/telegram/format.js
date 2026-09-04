@@ -102,15 +102,38 @@ function positions(db) {
   return `<b>Open positions</b> <i>(${policy})</i>\n${pre(body)}`;
 }
 
+function leaderRows(rows) {
+  return rows
+    .map(
+      (r) =>
+        `${icon(r.leader)} ${r.leader.slice(0, 15).padEnd(15)} ${String(r.n).padStart(3)}  ${usd(r.total).padStart(10)}  ${pct(r.avg).padStart(7)}`
+    )
+    .join('\n');
+}
+
 function perLeader(db) {
   const s = R.scoreboard(db);
-  if (!s.best) return 'Nothing has closed yet, so there is no PnL to attribute.';
-  const rows = R.perLeader(db, s.best.policy);
-  if (!rows.length) return 'Nothing has closed yet.';
-  const body = rows
-    .map((r) => `${icon(r.leader)} ${r.leader.slice(0, 15).padEnd(15)} ${String(r.n).padStart(3)}  ${usd(r.total).padStart(10)}  ${pct(r.avg).padStart(7)}`)
-    .join('\n');
-  return `<b>PnL per leader</b> <i>(${s.best.policy})</i>\n${pre(body)}`;
+  const closedPolicy = s.best?.policy || 'hold_24h';
+  const closed = R.perLeader(db, closedPolicy);
+  // Open book is always hold_24h so a runner still in play is visible even
+  // when a faster policy already exited and is winning the closed table.
+  const open = R.perLeaderOpen(db, 'hold_24h');
+
+  if (!closed.length && !open.length) return 'No shadow positions yet.';
+
+  const out = ['<b>PnL per leader</b>', ''];
+  out.push(`<b>Closed</b> <i>(${closedPolicy})</i>`);
+  out.push(closed.length ? pre(leaderRows(closed)) : '<i>Nothing closed yet. This is the score.</i>');
+  out.push('');
+  out.push('<b>Open</b> <i>(hold_24h, live mark)</i>');
+  out.push(
+    open.length
+      ? pre(leaderRows(open))
+      : '<i>No open hold_24h positions.</i>'
+  );
+  out.push('');
+  out.push('<i>Open dollars can vanish. Closed is who was actually +EV to copy.</i>');
+  return out.join('\n');
 }
 
 function policies() {
