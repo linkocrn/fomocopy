@@ -366,4 +366,19 @@ function policies() {
   );
 }
 
-module.exports = { overview, leaders, who, clusters, scoreboard, positions, perLeader, oneLeader, oneToken, policies, usd, pct, esc };
+module.exports = {
+  overview,
+  leaders,
+  who,
+  clusters,
+  scoreboard,
+  positions,
+  perLeader,
+  oneLeader,
+  oneToken,
+  policies,
+  usd,
+  pct,
+  esc,
+  ago: ageShort,
+};

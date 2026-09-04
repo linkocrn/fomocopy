@@ -175,6 +175,7 @@ function statements(db) {
          @seen_ts, @pair_created_at, @pair_address, @dex_id,
          @vol_h1, @vol_h24, @change_m5, @change_h1, @buys_h1, @sells_h1, @price_source)
     `),
+    lastEventAt: db.prepare('SELECT MAX(ts) ts FROM events WHERE chain_id = ?'),
     getToken: db.prepare('SELECT * FROM tokens WHERE chain_id = ? AND address = ?'),
     putToken: db.prepare('INSERT OR REPLACE INTO tokens (chain_id, address, symbol, decimals) VALUES (?, ?, ?, ?)'),
 

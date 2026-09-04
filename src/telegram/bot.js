@@ -256,9 +256,16 @@ class Bot {
       `Shadow mode, nothing executed. Up ${up < 1 ? `${Math.round(up * 60)}m` : `${up.toFixed(1)}h`}.`,
       '',
     ];
+    // A watcher can be "connected" and still be subscribed to nothing, which
+    // looks exactly like a quiet market until you check. Say it plainly.
     for (const w of this.state.watchers) {
       const cursor = this.st.getCursor.get(w.chain.id)?.block;
-      lines.push(`<b>${fmt.esc(w.chain.name)}</b> — block ${cursor ?? '-'}`);
+      const last = this.st.lastEventAt?.get(w.chain.id)?.ts;
+      const quiet = last ? `last trade ${fmt.ago(last)} ago` : 'no trades yet';
+      lines.push(
+        `${w.healthy ? '🟢' : '🔴'} <b>${fmt.esc(w.chain.name)}</b> · block ${cursor ?? '-'} · ${quiet}` +
+          (w.healthy ? '' : '\n<b>Not subscribed.</b> Sweep is still polling, so nothing is lost, but alerts are delayed.')
+      );
     }
     lines.push('', fmt.overview(this.db));
     if (muted) lines.push('', `${muted} leader(s) muted.`);
