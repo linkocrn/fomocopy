@@ -7,7 +7,23 @@ const R = require('../report');
 const { POLICIES } = require('../../config/policy');
 const { CHAINS } = require('../../config/chains');
 const { LEADERS, icon } = require('../../config/leaders');
-const { money, exact } = require('./alerts');
+const { money, exact, fomoProfile, fomoToken, twitterProfile } = require('./alerts');
+
+const addressOf = (handle) => LEADERS.find((l) => l.handle === handle)?.evm || null;
+
+// A token line is only useful if you can go look at it, and Telegram will not
+// render links inside <pre>. So the numbers stay in a monospace block and the
+// links sit on their own line underneath it.
+function tokenLinks(chain, token, extra = []) {
+  if (!chain) return null;
+  const links = [
+    `<a href="https://dexscreener.com/${chain.dexscreener}/${token}">chart</a>`,
+    `<a href="${fomoToken(chain, token)}">fomo</a>`,
+    `<a href="${chain.explorer}/token/${token}">scan</a>`,
+    ...extra,
+  ];
+  return links.join(' · ');
+}
 
 const usd = (n) => (n == null ? '-' : `${n < 0 ? '-' : ''}$${Math.abs(n).toFixed(2)}`);
 const pct = (n) => (n == null ? '-' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`);
@@ -157,38 +173,91 @@ function oneLeader(db, arg) {
     return { usd: null, pct: null };
   };
 
-  const line = (p) => {
-    const { usd: u, pct: pc } = livePnl(p);
-    const ageMs = Date.now() - (p.entry_ts || p.opened_ts);
-    const age = `${(ageMs / 3_600_000).toFixed(1)}h`;
-    const st = p.status === 'open' ? 'opn' : p.status === 'closed' ? 'cls' : 'skp';
-    const why = p.status === 'closed' ? (p.exit_reason || '') : p.status === 'skipped' ? (p.skip_reason || '') : '';
-    return `${(p.symbol || p.token.slice(0, 8)).slice(0, 10).padEnd(10)} ${st} ${age.padStart(5)} ${usd(u).padStart(9)} ${pct(pc).padStart(7)} ${why}`.trimEnd();
+  // Several copies of one token read as one holding, not as separate rows, and
+  // grouping keeps the links to one set per token instead of one per copy.
+  const byToken = (rows) => {
+    const map = new Map();
+    for (const p of rows) {
+      const key = `${p.chain_id}:${p.token}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(p);
+    }
+    return [...map.values()];
   };
+
+  const block = (group) => {
+    const p = group[0];
+    const chain = CHAINS[p.chain_id];
+    const vals = group.map(livePnl);
+    const total = vals.reduce((a, v) => a + (v.usd || 0), 0);
+    const pcts = vals.map((v) => v.pct).filter((v) => v != null);
+    const avg = pcts.length ? pcts.reduce((a, b) => a + b, 0) / pcts.length : null;
+    const age = ((Date.now() - Math.min(...group.map((x) => x.entry_ts || x.opened_ts))) / 3_600_000).toFixed(1);
+
+    const context = [
+      `${group.length} copy${group.length === 1 ? '' : 's'}`,
+      `${age}h`,
+      money(p.last_liquidity_usd ?? p.entry_liquidity_usd) ? `liq ${money(p.last_liquidity_usd ?? p.entry_liquidity_usd)}` : null,
+      money(p.last_mcap_usd ?? p.entry_mcap_usd) ? `mcap ${money(p.last_mcap_usd ?? p.entry_mcap_usd)}` : null,
+      [...new Set(group.map((x) => x.exit_reason).filter(Boolean))].join(', ') || null,
+    ].filter(Boolean);
+
+    const tx = p.last_tx && chain ? [`<a href="${chain.explorer}/tx/${p.last_tx}">tx</a>`] : [];
+
+    return [
+      `<b>${esc(p.symbol || p.token.slice(0, 8))}</b>  ${usd(total)}  ${pct(avg)}`,
+      `<i>${esc(context.join(' · '))}</i>`,
+      tokenLinks(chain, p.token, tx),
+    ]
+      .filter(Boolean)
+      .join('\n');
+  };
+
+  // Biggest mover first: with a dozen tokens the interesting one should not be
+  // buried by whichever happened to be bought most recently.
+  const section = (rows) =>
+    byToken(rows)
+      .sort((a, b) => {
+        const sum = (g) => g.reduce((acc, p) => acc + (livePnl(p).usd || 0), 0);
+        return sum(b) - sum(a);
+      })
+      .map(block)
+      .join('\n\n');
 
   const open = hold.filter((p) => p.status === 'open');
   const closed = hold.filter((p) => p.status === 'closed');
   const skipped = hold.filter((p) => p.status === 'skipped');
 
+  const addr = addressOf(handle);
+  const chains = [...new Set(hold.map((p) => p.chain_id))].map((id) => CHAINS[id]).filter(Boolean);
+
   const out = [
     `${icon(handle)} <b>${esc(handle)}</b>`,
     `${act.n || 0} trades · ${act.buys || 0}b/${act.sells || 0}s · ${act.tokens || 0} tokens`,
+    addr ? `<code>${addr}</code>` : null,
+    [
+      `<a href="${fomoProfile(handle)}">fomo</a>`,
+      `<a href="${twitterProfile(handle)}">twitter</a>`,
+      ...chains.map((c) => `<a href="${c.explorer}/address/${addr}">${esc(c.slug)}</a>`),
+    ]
+      .filter(() => addr)
+      .join(' · '),
     '',
-  ];
+  ].filter((l) => l !== null);
 
   if (open.length) {
-    out.push('<b>Open</b> <i>(hold_24h, live mark)</i>');
-    out.push(pre(open.map(line).join('\n')));
+    out.push('<b>Open</b> <i>(hold_24h, live mark)</i>', '');
+    out.push(section(open));
     out.push('');
   }
   if (closed.length) {
-    out.push('<b>Closed</b> <i>(hold_24h)</i>');
-    out.push(pre(closed.map(line).join('\n')));
+    out.push('<b>Closed</b> <i>(hold_24h)</i>', '');
+    out.push(section(closed));
     out.push('');
   }
   if (scored.length) {
-    out.push(`<b>Closed</b> <i>(${closedPolicy}, the current score)</i>`);
-    out.push(pre(scored.map(line).join('\n')));
+    out.push(`<b>Closed</b> <i>(${closedPolicy}, the current score)</i>`, '');
+    out.push(section(scored));
     out.push('');
   }
   if (skipped.length) {
@@ -276,12 +345,9 @@ function oneToken(db, handleArg, tokenArg) {
       out.push(`${copyNote}\n${pre(copyLines.join('\n'))}`);
     }
 
-    if (chain) {
-      out.push(
-        `<a href="https://dexscreener.com/${chain.dexscreener}/${hit.token}">chart</a>` +
-          ` · <a href="https://fomo.family/tokens/${chain.slug}/${hit.token}">fomo chart</a>`
-      );
-    }
+    const lastTx = [...events].reverse().find((e) => e.tx_hash)?.tx_hash;
+    const links = tokenLinks(chain, hit.token, lastTx ? [`<a href="${chain.explorer}/tx/${lastTx}">last tx</a>`] : []);
+    if (links) out.push(links);
   }
 
   return out.join('\n');

@@ -184,8 +184,15 @@ function leaderPositions(db, handle, policy) {
       `SELECT p.status, p.qty, p.size_usd, p.entry_price, p.leader_price,
               p.opened_ts, p.entry_ts, p.exit_ts, p.exit_reason, p.pnl_usd, p.pnl_pct,
               p.skip_reason, p.chain_id, p.token,
+              p.entry_liquidity_usd, p.entry_mcap_usd,
               (SELECT symbol FROM tokens t WHERE t.chain_id = p.chain_id AND t.address = p.token) symbol,
-              (SELECT price FROM marks m WHERE m.position_id = p.id ORDER BY offset_ms DESC LIMIT 1) last_price
+              (SELECT price         FROM marks m WHERE m.position_id = p.id ORDER BY offset_ms DESC LIMIT 1) last_price,
+              (SELECT liquidity_usd FROM marks m WHERE m.position_id = p.id ORDER BY offset_ms DESC LIMIT 1) last_liquidity_usd,
+              (SELECT mcap_usd      FROM marks m WHERE m.position_id = p.id ORDER BY offset_ms DESC LIMIT 1) last_mcap_usd,
+              (SELECT MAX(e.tx_hash) FROM events e
+                WHERE e.chain_id = p.chain_id AND e.token = p.token AND e.leader = p.leader
+                  AND e.ts = (SELECT MAX(ts) FROM events e2
+                              WHERE e2.chain_id = p.chain_id AND e2.token = p.token AND e2.leader = p.leader)) last_tx
        FROM positions p
        WHERE p.leader = ? AND p.policy = ?
        ORDER BY p.opened_ts DESC`
