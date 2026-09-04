@@ -48,6 +48,7 @@ const pairAge = (createdAt) => {
 };
 
 const fomoProfile = (handle) => `https://fomo.family/profile/${handle}`;
+const fomoToken = (chain, token) => `https://fomo.family/tokens/${chain.slug}/${token}`;
 const twitterProfile = (handle) => `https://x.com/${handle}`;
 
 // Leads every alert so buys and sells separate at a glance, before you read
@@ -81,6 +82,7 @@ function makeAlerter(send) {
       bits.length ? `${t.chain.name}  ·  ${bits.join('  ·  ')}` : t.chain.name,
       walletLine(t.leaderAddr),
       `<a href="https://dexscreener.com/${t.chain.dexscreener}/${t.token}">chart</a>` +
+        ` · <a href="${fomoToken(t.chain, t.token)}">fomo chart</a>` +
         ` · <a href="${t.chain.explorer}/tx/${t.txHash}">tx</a>` +
         ` · <a href="${t.chain.explorer}/address/${t.leaderAddr}">wallet</a>` +
         ` · <a href="${fomoProfile(t.leader)}">fomo</a>` +
@@ -100,6 +102,7 @@ function makeAlerter(send) {
         .join('  ·  '),
       walletLine(b.leaderAddr),
       `<a href="https://dexscreener.com/${b.chain.dexscreener}/${b.token}">chart</a>` +
+        ` · <a href="${fomoToken(b.chain, b.token)}">fomo chart</a>` +
         ` · <a href="${fomoProfile(b.leader)}">fomo</a>` +
         ` · <a href="${twitterProfile(b.leader)}">twitter</a>`,
     ]
@@ -137,4 +140,4 @@ function makeAlerter(send) {
   };
 }
 
-module.exports = { makeAlerter, money, exact, pairAge, fomoProfile, twitterProfile, BURST_QUIET_MS };
+module.exports = { makeAlerter, money, exact, pairAge, fomoProfile, fomoToken, twitterProfile, BURST_QUIET_MS };
