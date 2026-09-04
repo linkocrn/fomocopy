@@ -112,8 +112,11 @@ class Engine {
   // One pending position per policy. Entry price is filled in later, at
   // ENTRY.entryDelayMs, so our fill reflects the price after their impact.
   openShadowPositions(eventId, row, quote) {
+    const age = Date.now() - row.ts;
+
     let skip = null;
-    if (!quote?.price) skip = 'no_price';
+    if (age > ENTRY.maxTradeAgeMs) skip = 'stale_replay';
+    else if (!quote?.price) skip = 'no_price';
     else if ((quote.liquidity ?? 0) < ENTRY.minLiquidityUsd) skip = 'low_liquidity';
     else if ((quote.fdv ?? 0) > ENTRY.maxFdvUsd) skip = 'fdv_too_high';
 

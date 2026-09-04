@@ -141,6 +141,13 @@ their fill price would show profits that do not exist.
   FOMO vault are not captured. Widening the filter would reintroduce airdrop noise.
 - No slippage or gas is modelled. Both make real results worse than the
   simulation, so treat the output as an optimistic bound.
+- Stopping and restarting is safe: the watcher replays every block it missed, so
+  no trade is lost from the event log. Those replayed trades do **not** open
+  shadow positions though, because pricing a "30 second" fill an hour after the
+  fact would corrupt the entry-cost stat. They show up as `stale_replay` in the
+  skipped list. A replayed *sell* still closes positions opened before the gap,
+  at the current price rather than the price when they actually sold, so long
+  downtime makes those particular exits pessimistic.
 
 ## Layout
 

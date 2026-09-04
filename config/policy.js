@@ -21,6 +21,16 @@ const ENTRY = {
 
   // Cap how many separate buys of the same token by the same leader we stack.
   maxAddsPerPosition: 3,
+
+  // Do not simulate an entry from a trade we are only seeing now because the
+  // process was asleep. Gap-filled trades are still recorded, but opening a
+  // position from one would price our "30 second" fill minutes or hours after
+  // the fact and silently corrupt both the entry-cost stat and the PnL.
+  //
+  // Has to be tight, not merely generous. A four-minute-old replayed trade
+  // produced a fake +62% entry cost during testing. Live subscription trades
+  // arrive within a couple of seconds, so this only ever rejects replays.
+  maxTradeAgeMs: 60_000,
 };
 
 // Marks are taken at these offsets from entry. Trailing policies also use them
