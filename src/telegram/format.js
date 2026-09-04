@@ -269,7 +269,11 @@ function oneToken(db, handleArg, tokenArg) {
         const why = p.exit_reason || p.skip_reason || '';
         return `${st}  ${usd(live.usd).padStart(9)}  ${pct(live.pct).padStart(7)}  ${why}`.trimEnd();
       });
-      out.push(`<i>Our $100 copy (hold_24h)</i>\n${pre(copyLines.join('\n'))}`);
+      const copyNote =
+        events[0]?.side === 'sell'
+          ? '<i>Our $100 copy is only the later add, not the dump above.</i>'
+          : '<i>Our $100 copy (hold_24h)</i>';
+      out.push(`${copyNote}\n${pre(copyLines.join('\n'))}`);
     }
 
     if (chain) {

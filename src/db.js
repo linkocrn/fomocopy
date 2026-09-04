@@ -192,6 +192,9 @@ function statements(db) {
     skip: db.prepare("UPDATE positions SET status = 'skipped', skip_reason = ? WHERE id = ?"),
     openPositions: db.prepare("SELECT * FROM positions WHERE status = 'open'"),
     openFor: db.prepare("SELECT * FROM positions WHERE status = 'open' AND chain_id = ? AND token = ? AND leader = ?"),
+    liveFor: db.prepare(
+      "SELECT * FROM positions WHERE chain_id = ? AND token = ? AND leader = ? AND status IN ('open', 'pending')"
+    ),
     reduce: db.prepare('UPDATE positions SET qty = ? WHERE id = ?'),
     armTrail: db.prepare('UPDATE positions SET trail_armed = 1, trail_peak = ? WHERE id = ?'),
     setPeak: db.prepare('UPDATE positions SET trail_peak = ? WHERE id = ?'),

@@ -22,6 +22,11 @@ const ENTRY = {
   // Cap how many separate buys of the same token by the same leader we stack.
   maxAddsPerPosition: 3,
 
+  // A buy that is a small slice of an already-large bag, when we never copied
+  // the original entry, is a top-up to someone else's movie. Copying it as a
+  // fresh $100 position pretends we were in the trade. Skip those.
+  minNewBagFrac: 0.25,
+
   // Do not simulate an entry from a trade we are only seeing now because the
   // process was asleep. Gap-filled trades are still recorded, but opening a
   // position from one would price our "30 second" fill minutes or hours after

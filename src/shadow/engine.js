@@ -138,11 +138,20 @@ class Engine {
   openShadowPositions(eventId, row, quote) {
     const age = Date.now() - row.ts;
 
+    const alreadyIn = this.st.liveFor.all(row.chain_id, row.token, row.leader).length > 0;
+
     let skip = null;
     if (age > ENTRY.maxTradeAgeMs) skip = 'stale_replay';
     else if (!quote?.price) skip = 'no_price';
     else if ((quote.liquidity ?? 0) < ENTRY.minLiquidityUsd) skip = 'low_liquidity';
     else if ((quote.fdv ?? 0) > ENTRY.maxFdvUsd) skip = 'fdv_too_high';
+    else if (
+      !alreadyIn &&
+      row.leader_frac != null &&
+      row.leader_frac < ENTRY.minNewBagFrac
+    ) {
+      skip = 'mid_bag';
+    }
 
     for (const policy of Object.keys(POLICIES)) {
       this.st.insertPosition.run({
