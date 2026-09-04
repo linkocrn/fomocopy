@@ -64,6 +64,16 @@ npm run report          # read the results
 positions, because DexScreener serves current prices and pricing a week-old trade
 with today's number would look like PnL when it is noise.
 
+### Telegram
+
+Setting `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` sends one message per leader
+trade, with the size, what share of their bag a sell was, current liquidity, and
+links to the chart and the transaction. Expect roughly five an hour. Leave either
+variable blank to turn it off.
+
+There is no bot command surface. This runs for one person, so reporting lives in
+`npm run report`.
+
 ## The five policies
 
 Every policy sees the same event stream with the same entry rules, so only the
