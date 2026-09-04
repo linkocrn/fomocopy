@@ -74,6 +74,7 @@ class Engine {
       size_usd: price ? amount * price : null,
       liquidity_usd: quote?.liquidity ?? null,
       fdv_usd: quote?.fdv ?? null,
+      mcap_usd: quote?.mcap ?? null,
     };
     delete row.leader_addr;
 
@@ -94,15 +95,19 @@ class Engine {
     const muted = !!this.st.isMuted.get(trade.leader);
 
     if (!muted) {
-      this.notify(
-        [
-          `<b>${trade.side.toUpperCase()}</b>  ${trade.leader}`,
-          `<b>${sym}</b> ${size}${fracTxt}`,
-          `${chain.name}${row.liquidity_usd ? ` · liq $${Math.round(row.liquidity_usd).toLocaleString()}` : ''}`,
-          `<a href="https://dexscreener.com/${chain.dexscreener}/${trade.token}">chart</a> · ` +
-            `<a href="${chain.explorer}/tx/${trade.tx_hash}">tx</a>`,
-        ].join('\n')
-      );
+      this.notify({
+        chain,
+        leader: trade.leader,
+        leaderAddr: trade.leader_addr,
+        side: trade.side,
+        symbol: sym,
+        token: trade.token,
+        txHash: trade.tx_hash,
+        sizeUsd: row.size_usd,
+        fracOfBag: leaderFrac,
+        mcap: row.mcap_usd,
+        liquidity: row.liquidity_usd,
+      });
     }
 
     if (trade.side === 'sell') this.applyLeaderSell(row, price);

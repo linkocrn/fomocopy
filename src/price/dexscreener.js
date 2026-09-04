@@ -51,6 +51,9 @@ async function fetchPrice(chain, token) {
         price: Number(pair.priceUsd) || null,
         liquidity: pair.liquidity?.usd ?? null,
         fdv: pair.fdv ?? null,
+        // Circulating market cap when DexScreener reports it, otherwise fully
+        // diluted. For most of these launches the two are the same.
+        mcap: pair.marketCap ?? pair.fdv ?? null,
         symbol: pair.baseToken?.symbol ?? null,
       };
     } catch (e) {

@@ -70,9 +70,17 @@ Set `TELEGRAM_BOT_TOKEN` and send the bot `/start`. The first chat to message it
 becomes the owner and is remembered in the database, so there is no chat id to
 look up. Every other chat is ignored.
 
-You get one alert per leader trade (roughly five an hour) with the size, what
-share of their bag a sell was, current liquidity, and links to the chart and the
-transaction. Plus these commands:
+Alerts carry the exact dollar size, what share of their bag a sell was, market
+cap, liquidity, and links to the chart, the transaction, the wallet and the
+trader's FOMO profile.
+
+Leaders scale in and out rather than trading once. `slingoor` unloaded MEME in
+fourteen separate transactions about fifteen seconds apart, which as raw alerts
+would be fourteen near-identical messages. So the first trade of a burst goes
+out immediately, because that is the one worth reacting to, and everything after
+it is accumulated into a single rollup sent once the burst goes quiet.
+
+Commands:
 
 | command | |
 | --- | --- |

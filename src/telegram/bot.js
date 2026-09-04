@@ -3,6 +3,7 @@
 const { logger } = require('../util/log');
 const { EVM_LEADERS } = require('../../config/leaders');
 const fmt = require('./format');
+const { makeAlerter } = require('./alerts');
 
 const log = logger('telegram');
 const API = (token, method) => `https://api.telegram.org/bot${token}/${method}`;
@@ -35,6 +36,7 @@ class Bot {
     this.stopped = false;
     this.queue = Promise.resolve();
     this.owner = st.getSetting.get('owner_chat_id')?.value || process.env.TELEGRAM_CHAT_ID || null;
+    this.alerter = makeAlerter((text) => this.send(text));
   }
 
   get paused() {
@@ -65,10 +67,11 @@ class Bot {
     return this.queue;
   }
 
-  // The alert path used by the engine. Respects pause.
-  notify(text) {
+  // The alert path used by the engine. Takes a structured trade rather than a
+  // string so the alerter can coalesce a burst into one rollup. Respects pause.
+  notify(trade) {
     if (this.paused) return;
-    this.send(text);
+    this.alerter(trade);
   }
 
   async start() {

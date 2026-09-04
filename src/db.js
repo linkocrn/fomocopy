@@ -35,6 +35,7 @@ function migrate(db) {
       size_usd      REAL,
       liquidity_usd REAL,
       fdv_usd       REAL,
+      mcap_usd      REAL,
       UNIQUE (chain_id, tx_hash, log_index)
     );
     CREATE INDEX IF NOT EXISTS idx_events_token ON events (chain_id, token, ts);
@@ -121,6 +122,17 @@ function migrate(db) {
       since  INTEGER NOT NULL
     );
   `);
+
+  addColumns(db, 'events', { mcap_usd: 'REAL' });
+}
+
+// CREATE TABLE IF NOT EXISTS does nothing to a table that already exists, so
+// new columns need an explicit ALTER against databases created before them.
+function addColumns(db, table, columns) {
+  const have = new Set(db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name));
+  for (const [name, type] of Object.entries(columns)) {
+    if (!have.has(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${type}`);
+  }
 }
 
 function statements(db) {
@@ -128,10 +140,10 @@ function statements(db) {
     insertEvent: db.prepare(`
       INSERT OR IGNORE INTO events
         (chain_id, block, log_index, tx_hash, ts, leader, side, token,
-         amount_raw, amount, leader_frac, price_usd, size_usd, liquidity_usd, fdv_usd)
+         amount_raw, amount, leader_frac, price_usd, size_usd, liquidity_usd, fdv_usd, mcap_usd)
       VALUES
         (@chain_id, @block, @log_index, @tx_hash, @ts, @leader, @side, @token,
-         @amount_raw, @amount, @leader_frac, @price_usd, @size_usd, @liquidity_usd, @fdv_usd)
+         @amount_raw, @amount, @leader_frac, @price_usd, @size_usd, @liquidity_usd, @fdv_usd, @mcap_usd)
     `),
     getToken: db.prepare('SELECT * FROM tokens WHERE chain_id = ? AND address = ?'),
     putToken: db.prepare('INSERT OR REPLACE INTO tokens (chain_id, address, symbol, decimals) VALUES (?, ?, ?, ?)'),
