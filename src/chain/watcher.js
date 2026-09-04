@@ -7,7 +7,12 @@ const { decode, FILTERS } = require('./decode');
 
 // The socket is a latency optimisation, not a guarantee, so the tip is polled
 // on this interval regardless of how healthy the connection looks.
-const SWEEP_MS = 120_000;
+//
+// Kept under ENTRY.maxTradeAgeMs on purpose. A trade the socket drops is only
+// worth recovering if it is still fresh enough to shadow honestly; at a
+// two-minute interval every recovered trade arrived stale and was thrown away,
+// which quietly biased the sample against whatever the socket tends to miss.
+const SWEEP_MS = 30_000;
 
 // One watcher per chain. Holds a WebSocket with two log subscriptions and
 // replays any blocks missed while disconnected, so a dropped socket costs
@@ -74,7 +79,13 @@ class Watcher {
         const found = await this.backfill(this.lastBlock + 1, tip);
         this.lastBlock = tip;
         this.cursor.set(tip);
-        if (found && !this.healthy) this.log.warn(`sweep recovered ${found} trade(s) while the socket was down`);
+        // Worth surfacing either way. Recovering trades from a healthy socket
+        // means the subscription is lossy, which is only visible if we say so.
+        if (found) {
+          this.log.warn(
+            `sweep recovered ${found} trade(s) the socket ${this.healthy ? 'did not deliver' : 'missed while down'}`
+          );
+        }
       }
       this.lastSweep = Date.now();
       if (!this.healthy && !this.settling && !this.reconnecting) this.reconnect('subscriptions not live');
