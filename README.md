@@ -149,16 +149,39 @@ between the leader's fill and ours. Positions enter at the price
 Buying their pump is the main cost of copy trading, and a simulation that used
 their fill price would show profits that do not exist.
 
+The leader's side of that comparison is their real fill, taken from the
+stablecoin leg of their own transaction (see Pricing). That is an average over
+their whole order and includes the impact of pushing the book. Ours is a $100
+print that moves nothing. So the number runs in both directions: positive is the
+part of their pump we still buy, negative is the slippage they paid and we did
+not. Early data shows a mean of about -4%, meaning size is a real disadvantage
+for the leader and a quiet edge for the copier.
+
+## Pricing
+
+Trade value is read from the transaction, not from a price feed. Every FOMO swap
+moves a stablecoin through the settlement vault, USDG on Robinhood Chain and USDC
+on Base, and that amount is what the leader actually paid or received. It needs
+no pool selection, so it cannot be thrown off by a token that is the quote side
+of its deepest pair, and it stays correct for a trade read hours later, which is
+what lets `npm run reprice` value backfilled history.
+
+It was present on 45 of 45 sampled trades. Where a spot quote existed to compare
+against, the two sat a median 7.3% apart, with sells consistently settling below
+spot by the leader's own slippage.
+
+DexScreener still supplies what only it can: liquidity, market cap, pair age, and
+the price our own hypothetical fill pays 30s later. `events.price_source` records
+which path produced each row, so an estimate is never mistaken for a measurement.
+
 ## Known simplifications
 
 - A leader's sell only affects positions opened by **that same leader** in that
   same token. When several leaders hold the same token, whose sell should exit
   you is a real design question; the report surfaces those clusters so it can be
   answered from data instead of guessed at.
-- Leader trade size is `amount x current price`. FOMO batches several users into
-  one transaction, so the WETH legs cannot be cleanly attributed per user and the
-  leader's exact fill price is approximate. Our own entry price is exact, which is
-  the number the PnL depends on.
+- Leader trade size is read from the settlement leg and is exact. Our own entry
+  price is a spot quote, and that is the number the PnL depends on.
 - The remaining 3% of Base swaps and 28% of Robinhood swaps that route around the
   FOMO vault are not captured. Widening the filter would reintroduce airdrop noise.
 - No slippage or gas is modelled. Both make real results worse than the

@@ -84,7 +84,7 @@ function scoreboard(db) {
   if (e) {
     out.push('', `<b>Entry cost</b> (our fill ${e.delaySec}s after theirs, n=${e.n})`);
     out.push(`mean ${pct(e.mean)} · median ${pct(e.median)} · worst ${pct(e.worst)}`);
-    out.push('<i>Positive means we bought their pump. This is the tax on copying.</i>');
+    out.push('<i>Positive means we bought their pump. Negative is the price impact they pay on the whole order and our $100 does not.</i>');
   }
   return out.join('\n');
 }

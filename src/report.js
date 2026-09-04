@@ -56,7 +56,13 @@ function clusters(db, limit = 8) {
     .all(limit);
 }
 
-// How far price moved between the leader's fill and ours. The tax on copying.
+// Our fill against the leader's own, now that theirs is read from their
+// settlement leg rather than guessed from spot.
+//
+// Their fill is the average price of their whole order, impact included. Ours
+// is a $100 print 30s later that moves nothing. So a negative number is not us
+// outtrading them, it is us not paying to push the book the way they did. A
+// positive number is the part of their pump we still buy.
 function entryCost(db) {
   const d = db
     .prepare(

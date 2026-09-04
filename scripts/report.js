@@ -45,7 +45,8 @@ if (e) {
   console.log(`  mean:      ${pct(e.mean)}`);
   console.log(`  median:    ${pct(e.median)}`);
   console.log(`  worst:     ${pct(e.worst)}`);
-  console.log('  A positive number is how much of their pump we buy. This is the tax on copying.');
+  console.log('  Positive is the part of their pump we buy. Negative is their price impact,');
+  console.log('  which they pay on the whole order and our $100 does not.');
 }
 
 const s = R.scoreboard(db);
