@@ -41,16 +41,20 @@ function pick(pairs, dexChain, token) {
   return { pool, isBase };
 }
 
+// priceUsd, fdv and marketCap on a pair all describe its *base* token. When our
+// token is only the quote side, the sole usable number is priceUsd/priceNative,
+// and everything derived from the base token has to be dropped rather than
+// misattributed. Without priceNative there is nothing to invert, so no price.
 function quoteFrom(pool, isBase) {
-  let price = Number(pool.priceUsd) || null;
-  if (!isBase && price && Number(pool.priceNative)) {
-    price = price / Number(pool.priceNative);
-  }
+  const native = Number(pool.priceNative);
+  const usd = Number(pool.priceUsd) || null;
+  const price = isBase ? usd : usd && native ? usd / native : null;
+
   return {
     price,
     liquidity: pool.liquidity?.usd ?? null,
-    fdv: pool.fdv ?? null,
-    mcap: pool.marketCap ?? pool.fdv ?? null,
+    fdv: isBase ? pool.fdv ?? null : null,
+    mcap: isBase ? pool.marketCap ?? pool.fdv ?? null : null,
     symbol: (isBase ? pool.baseToken?.symbol : pool.quoteToken?.symbol) ?? null,
     pairCreatedAt: pool.pairCreatedAt || null,
     pairAddress: pool.pairAddress || null,
