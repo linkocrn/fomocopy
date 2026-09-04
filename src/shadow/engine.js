@@ -80,7 +80,14 @@ class Engine {
       amount,
       leader_frac: leaderFrac,
       price_usd: price,
-      size_usd: price ? amount * price : null,
+      // A size bigger than the whole coin is the pair-side bug, not a trade.
+      size_usd: (() => {
+        if (!price) return null;
+        const size = amount * price;
+        const mcap = quote?.mcap;
+        if (mcap && size > mcap * 5) return null;
+        return size;
+      })(),
       liquidity_usd: quote?.liquidity ?? null,
       fdv_usd: quote?.fdv ?? null,
       mcap_usd: quote?.mcap ?? null,

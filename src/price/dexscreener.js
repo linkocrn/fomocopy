@@ -25,12 +25,43 @@ function throttle(fn) {
   return queue;
 }
 
-// Picks the deepest pair on the right chain. A token can be quoted against
-// several bases; the most liquid one is the honest price.
-function pick(pairs, dexChain) {
+// Deepest pair where this token is the base. A token can also be the quote on
+// a deeper pool (Rabbit/WYFI had $1.1M liq vs Rabbit/USDG at $50k). Using that
+// pool's priceUsd prices the *other* asset, which is how a $4M coin showed as
+// a $2B buy.
+function pick(pairs, dexChain, token) {
+  const want = token.toLowerCase();
   const onChain = (pairs || []).filter((p) => p.chainId === dexChain);
   if (!onChain.length) return null;
-  return onChain.reduce((a, b) => ((b.liquidity?.usd || 0) > (a.liquidity?.usd || 0) ? b : a));
+  const asBase = onChain.filter((p) => p.baseToken?.address?.toLowerCase() === want);
+  const pool = (asBase.length ? asBase : onChain).reduce((a, b) =>
+    (b.liquidity?.usd || 0) > (a.liquidity?.usd || 0) ? b : a
+  );
+  const isBase = pool.baseToken?.address?.toLowerCase() === want;
+  return { pool, isBase };
+}
+
+function quoteFrom(pool, isBase) {
+  let price = Number(pool.priceUsd) || null;
+  if (!isBase && price && Number(pool.priceNative)) {
+    price = price / Number(pool.priceNative);
+  }
+  return {
+    price,
+    liquidity: pool.liquidity?.usd ?? null,
+    fdv: pool.fdv ?? null,
+    mcap: pool.marketCap ?? pool.fdv ?? null,
+    symbol: (isBase ? pool.baseToken?.symbol : pool.quoteToken?.symbol) ?? null,
+    pairCreatedAt: pool.pairCreatedAt || null,
+    pairAddress: pool.pairAddress || null,
+    dexId: pool.dexId || null,
+    volH1: pool.volume?.h1 ?? null,
+    volH24: pool.volume?.h24 ?? null,
+    changeM5: pool.priceChange?.m5 ?? null,
+    changeH1: pool.priceChange?.h1 ?? null,
+    buysH1: pool.txns?.h1?.buys ?? null,
+    sellsH1: pool.txns?.h1?.sells ?? null,
+  };
 }
 
 async function fetchPrice(chain, token) {
@@ -45,27 +76,9 @@ async function fetchPrice(chain, token) {
         log.warn(`${token.slice(0, 10)} HTTP ${res.status}`);
         return null;
       }
-      const pair = pick((await res.json()).pairs, chain.dexscreener);
-      if (!pair) return null;
-      return {
-        price: Number(pair.priceUsd) || null,
-        liquidity: pair.liquidity?.usd ?? null,
-        fdv: pair.fdv ?? null,
-        // Circulating market cap when DexScreener reports it, otherwise fully
-        // diluted. For most of these launches the two are the same.
-        mcap: pair.marketCap ?? pair.fdv ?? null,
-        symbol: pair.baseToken?.symbol ?? null,
-        // Unix ms. Same field DexScreener shows as "created" on the pair page.
-        pairCreatedAt: pair.pairCreatedAt || null,
-        pairAddress: pair.pairAddress || null,
-        dexId: pair.dexId || null,
-        volH1: pair.volume?.h1 ?? null,
-        volH24: pair.volume?.h24 ?? null,
-        changeM5: pair.priceChange?.m5 ?? null,
-        changeH1: pair.priceChange?.h1 ?? null,
-        buysH1: pair.txns?.h1?.buys ?? null,
-        sellsH1: pair.txns?.h1?.sells ?? null,
-      };
+      const picked = pick((await res.json()).pairs, chain.dexscreener, token);
+      if (!picked) return null;
+      return quoteFrom(picked.pool, picked.isBase);
     } catch (e) {
       log.warn(`${token.slice(0, 10)} ${e.message}`);
       return null;
