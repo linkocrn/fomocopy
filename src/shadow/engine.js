@@ -209,14 +209,13 @@ class Engine {
     if (skip) log.dim(`  skipped (${skip})`);
   }
 
-  // Counted across the whole history rather than this token alone, so a shared
-  // venue is recognised on the first brand-new token it lists. An unknown venue
-  // reads as private until a second token appears on it, which is the safe way
-  // round: the cost is a skipped copy, not a hundred percent loss.
+  // A venue's breadth is counted across the whole history, so a shared venue is
+  // recognised the moment it lists a brand-new token. A venue we have never
+  // seen before reads as private until a second token appears on it, which is
+  // the safe way round: the cost is a skipped copy, not a total loss.
   privateVenue(row) {
-    if (!row.venue) return false;
-    const { n } = this.st.venueTokens.get(row.venue, row.chain_id);
-    return n < ENTRY.minVenueTokens;
+    const { best } = this.st.tokenVenueSpread.get(row.chain_id, row.token);
+    return best != null && best < ENTRY.minVenueTokens;
   }
 
   // A leader sell only touches positions opened by that same leader in that

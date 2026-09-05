@@ -60,21 +60,29 @@ async function main() {
        FROM events WHERE venue IS NOT NULL GROUP BY venue ORDER BY tokens DESC`
     )
     .all();
-  log.info(`${venues.length} distinct venue(s):`);
-  for (const v of venues.slice(0, 6)) log.dim(`  ${v.venue}  ${v.tokens} token(s), ${v.events} event(s)`);
+  log.info(`${venues.length} distinct venue(s), the broadest few:`);
+  for (const v of venues.slice(0, 5)) log.dim(`  ${v.venue}  ${v.tokens} token(s), ${v.events} event(s)`);
 
-  const priv = venues.filter((v) => v.tokens < ENTRY.minVenueTokens);
-  log.info(`${priv.length} venue(s) serve fewer than ${ENTRY.minVenueTokens} tokens`);
+  // Judged per token, not per event. A token that has ever traded on a shared
+  // venue is fine even if a few of its fills routed through somewhere odd; only
+  // a token that has never touched anything but a private venue is condemned.
+  const PRIVATE = `
+    SELECT e.chain_id, e.token FROM events e
+    WHERE e.venue IS NOT NULL
+    GROUP BY e.chain_id, e.token
+    HAVING MAX((SELECT COUNT(DISTINCT token) FROM events v
+                WHERE v.venue = e.venue AND v.chain_id = e.chain_id)) < ${ENTRY.minVenueTokens}`;
 
   const affected = db
     .prepare(
-      `SELECT DISTINCT t.symbol, e.token FROM events e
-       LEFT JOIN tokens t ON t.chain_id = e.chain_id AND t.address = e.token
-       WHERE e.venue IN (SELECT venue FROM events WHERE venue IS NOT NULL
-                         GROUP BY venue HAVING COUNT(DISTINCT token) < ?)`
+      `SELECT t.symbol, p.token, COUNT(*) events FROM (${PRIVATE}) p
+       LEFT JOIN tokens t ON t.chain_id = p.chain_id AND t.address = p.token
+       LEFT JOIN events e ON e.chain_id = p.chain_id AND e.token = p.token
+       GROUP BY p.token ORDER BY events DESC`
     )
-    .all(ENTRY.minVenueTokens);
-  for (const a of affected) log.dim(`  ${a.symbol || a.token}`);
+    .all();
+  log.info(`${affected.length} token(s) never seen on a shared venue:`);
+  for (const a of affected) log.dim(`  ${(a.symbol || a.token).padEnd(14)} ${a.events} event(s)`);
 
   // Void rather than delete. A copy opened on a private venue was never a real
   // opportunity, so it should not appear as a loss any more than as a win.
@@ -83,13 +91,10 @@ async function main() {
       `UPDATE positions
        SET status = 'skipped', skip_reason = 'private_venue',
            pnl_usd = NULL, pnl_pct = NULL, exit_reason = NULL
-       WHERE open_event IN (
-         SELECT id FROM events WHERE venue IN (
-           SELECT venue FROM events WHERE venue IS NOT NULL
-           GROUP BY venue HAVING COUNT(DISTINCT token) < ?))
+       WHERE (chain_id, token) IN (SELECT chain_id, token FROM (${PRIVATE}))
          AND IFNULL(skip_reason, '') <> 'private_venue'`
     )
-    .run(ENTRY.minVenueTokens);
+    .run();
   log.ok(`voided ${voided.changes} position(s)`);
 
   db.close();

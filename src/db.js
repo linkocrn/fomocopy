@@ -191,10 +191,15 @@ function statements(db) {
          @vol_h1, @vol_h24, @change_m5, @change_h1, @buys_h1, @sells_h1, @price_source, @kind, @venue)
     `),
 
-    // How many distinct tokens we have ever seen come out of this venue. One
-    // means nobody else uses it.
-    venueTokens: db.prepare(
-      'SELECT COUNT(DISTINCT token) n FROM events WHERE venue = ? AND chain_id = ?'
+    // The broadest venue this token has ever traded on, measured by how many
+    // other tokens that venue also serves. Asked of the token rather than of a
+    // single event, because a normal token occasionally routes through an odd
+    // address and that should not condemn it.
+    tokenVenueSpread: db.prepare(
+      `SELECT MAX((SELECT COUNT(DISTINCT token) FROM events v
+                   WHERE v.venue = e.venue AND v.chain_id = e.chain_id)) best
+       FROM events e
+       WHERE e.chain_id = ? AND e.token = ? AND e.venue IS NOT NULL`
     ),
     lastEventAt: db.prepare('SELECT MAX(ts) ts FROM events WHERE chain_id = ?'),
     getToken: db.prepare('SELECT * FROM tokens WHERE chain_id = ? AND address = ?'),
