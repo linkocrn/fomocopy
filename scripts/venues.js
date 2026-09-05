@@ -101,6 +101,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  log.err(e.stack || e.message);
+  log.error(e.stack || e.message);
   process.exit(1);
 });
