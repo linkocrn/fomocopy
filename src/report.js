@@ -126,12 +126,29 @@ function scoreboard(db) {
   return { rows, best, baseline, sizeUsd: ENTRY.sizeUsd };
 }
 
+// Judges a leader only on buys they later sold out of themselves.
+//
+// We cannot prove who decided to make any given trade: FOMO pools the money and
+// signs with its own relayers, so intent is simply not on chain. A sell sidesteps
+// the question. Tokens that arrive in a wallet unasked are never sold, and in both
+// distribution cases we caught, all 24 leaders are still holding the exact bags
+// today. A leader who exits has either made a real trade or is actively managing
+// the bag, and either way the price path we would have copied is real.
+//
+// Not applied to the policy scoreboard, which asks a different question: exit
+// rules have to be compared over every position, including the ones nobody
+// ever sold, or hold_24h is judged on a hand-picked sample.
 function perLeader(db, policy) {
   return db
     .prepare(
-      `SELECT leader, COUNT(*) n, SUM(pnl_usd) total, AVG(pnl_pct) avg
-       FROM positions WHERE policy = ? AND status = 'closed'
-       GROUP BY leader ORDER BY total DESC`
+      `SELECT p.leader, COUNT(*) n, SUM(p.pnl_usd) total, AVG(p.pnl_pct) avg
+       FROM positions p
+       JOIN events e ON e.id = p.open_event
+       WHERE p.policy = ? AND p.status = 'closed'
+         AND EXISTS (SELECT 1 FROM trades s
+                     WHERE s.leader = e.leader AND s.token = e.token
+                       AND s.chain_id = e.chain_id AND s.side = 'sell' AND s.ts > e.ts)
+       GROUP BY p.leader ORDER BY total DESC`
     )
     .all(policy);
 }

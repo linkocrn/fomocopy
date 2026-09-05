@@ -70,6 +70,9 @@ if (s.best) {
   }
 
   bar(`Closed per-leader PnL under ${s.best.policy}`);
+  console.log('  Counting only tokens the leader sold out of themselves. A bag that was');
+  console.log('  never sold may never have been their trade, and intent is not on chain.');
+  console.log('');
   for (const r of R.perLeader(db, s.best.policy)) {
     console.log(`  ${r.leader.padEnd(18)} ${String(r.n).padStart(3)} trades  ${usd(r.total).padStart(10)}  ${pct(r.avg).padStart(8)}`);
   }

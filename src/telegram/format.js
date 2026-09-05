@@ -141,7 +141,7 @@ function perLeader(db) {
   if (!closed.length && !open.length) return 'No shadow positions yet.';
 
   const out = ['<b>PnL per leader</b>', ''];
-  out.push(`<b>Closed</b> <i>(${closedPolicy})</i>`);
+  out.push(`<b>Closed</b> <i>(${closedPolicy}, trades the leader exited themselves)</i>`);
   out.push(closed.length ? pre(leaderRows(closed)) : '<i>Nothing closed yet. This is the score.</i>');
   out.push('');
   out.push('<b>Open</b> <i>(hold_24h, live mark)</i>');
@@ -151,7 +151,10 @@ function perLeader(db) {
       : '<i>No open hold_24h positions.</i>'
   );
   out.push('');
-  out.push('<i>Open dollars can vanish. Closed is who was actually +EV to copy.</i>');
+  out.push(
+    '<i>Open dollars can vanish. Closed is who was actually +EV to copy, counting only ' +
+      'tokens the leader sold out of, since a bag nobody sold may never have been their trade.</i>'
+  );
   return out.join('\n');
 }
 
