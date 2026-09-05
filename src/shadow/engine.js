@@ -180,7 +180,6 @@ class Engine {
 
     let skip = null;
     if (age > ENTRY.maxTradeAgeMs) skip = 'stale_replay';
-    else if (this.privateVenue(row)) skip = 'private_venue';
     else if (!quote?.price) skip = 'no_price';
     else if ((quote.liquidity ?? 0) < ENTRY.minLiquidityUsd) skip = 'low_liquidity';
     else if ((quote.fdv ?? 0) > ENTRY.maxFdvUsd) skip = 'fdv_too_high';
@@ -207,15 +206,6 @@ class Engine {
       });
     }
     if (skip) log.dim(`  skipped (${skip})`);
-  }
-
-  // A venue's breadth is counted across the whole history, so a shared venue is
-  // recognised the moment it lists a brand-new token. A venue we have never
-  // seen before reads as private until a second token appears on it, which is
-  // the safe way round: the cost is a skipped copy, not a total loss.
-  privateVenue(row) {
-    const { best } = this.st.tokenVenueSpread.get(row.chain_id, row.token);
-    return best != null && best < ENTRY.minVenueTokens;
   }
 
   // A leader sell only touches positions opened by that same leader in that

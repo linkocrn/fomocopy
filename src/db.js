@@ -145,9 +145,10 @@ function migrate(db) {
     // tokens arrived or left for free. Transfers stay in this table as history
     // but are excluded from every report by the `trades` view below.
     kind: "TEXT NOT NULL DEFAULT 'trade'",
-    // Who supplied the token on a buy, or received it on a sell. FOMO's own
-    // venues each serve a hundred-odd tokens; a venue serving exactly one is
-    // a float held by a single party. See ENTRY.minVenueTokens.
+    // Who supplied the token on a buy, or received it on a sell. Recorded
+    // because it is cheap and occasionally informative. It is not a quality
+    // signal: WETH, cbBTC and the tokenised stocks each have their own
+    // dedicated venue, exactly like the two tokens that rugged.
     venue: 'TEXT',
   });
   addColumns(db, 'positions', {
@@ -191,16 +192,6 @@ function statements(db) {
          @vol_h1, @vol_h24, @change_m5, @change_h1, @buys_h1, @sells_h1, @price_source, @kind, @venue)
     `),
 
-    // The broadest venue this token has ever traded on, measured by how many
-    // other tokens that venue also serves. Asked of the token rather than of a
-    // single event, because a normal token occasionally routes through an odd
-    // address and that should not condemn it.
-    tokenVenueSpread: db.prepare(
-      `SELECT MAX((SELECT COUNT(DISTINCT token) FROM events v
-                   WHERE v.venue = e.venue AND v.chain_id = e.chain_id)) best
-       FROM events e
-       WHERE e.chain_id = ? AND e.token = ? AND e.venue IS NOT NULL`
-    ),
     lastEventAt: db.prepare('SELECT MAX(ts) ts FROM events WHERE chain_id = ?'),
     getToken: db.prepare('SELECT * FROM tokens WHERE chain_id = ? AND address = ?'),
     putToken: db.prepare('INSERT OR REPLACE INTO tokens (chain_id, address, symbol, decimals) VALUES (?, ?, ?, ?)'),

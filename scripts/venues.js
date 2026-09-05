@@ -1,12 +1,15 @@
 'use strict';
 
-// Records which venue supplied the token on every historical trade, then voids
-// copies opened on a venue nobody else uses.
+// Records which venue supplied the token on every historical trade.
 //
-// FOMO's own venues each hold a hundred-odd tokens. PONSVIL and AARTC were each
-// supplied by a contract serving that one token, and both ended at zero
-// liquidity with every leader still holding the exact bag they bought. Copies
-// opened off those are not trades we could have made, so they are not scored.
+// This was written to test a theory: that a token whose float sits in a venue
+// nobody else trades through is controlled by one party and therefore a rug
+// risk. PONSVIL and AARTC both fit and both died. The theory did not survive
+// contact with the rest of the data. Of 36 tokens it flags, 33 are healthy,
+// including WETH at $29m of liquidity, cbBTC, and the tokenised stocks. Having
+// a dedicated pool is what any serious asset looks like.
+//
+// The venue is still worth recording, it just is not a quality signal.
 //
 // Pass --apply to write; without it, only reports.
 
@@ -14,7 +17,6 @@ require('dotenv').config();
 
 const { open } = require('../src/db');
 const { enabledChains } = require('../config/chains');
-const { ENTRY } = require('../config/policy');
 const { Rpc } = require('../src/chain/rpc');
 const { settlement } = require('../src/chain/settle');
 const { logger } = require('../src/util/log');
@@ -63,39 +65,8 @@ async function main() {
   log.info(`${venues.length} distinct venue(s), the broadest few:`);
   for (const v of venues.slice(0, 5)) log.dim(`  ${v.venue}  ${v.tokens} token(s), ${v.events} event(s)`);
 
-  // Judged per token, not per event. A token that has ever traded on a shared
-  // venue is fine even if a few of its fills routed through somewhere odd; only
-  // a token that has never touched anything but a private venue is condemned.
-  const PRIVATE = `
-    SELECT e.chain_id, e.token FROM events e
-    WHERE e.venue IS NOT NULL
-    GROUP BY e.chain_id, e.token
-    HAVING MAX((SELECT COUNT(DISTINCT token) FROM events v
-                WHERE v.venue = e.venue AND v.chain_id = e.chain_id)) < ${ENTRY.minVenueTokens}`;
-
-  const affected = db
-    .prepare(
-      `SELECT t.symbol, p.token, COUNT(*) events FROM (${PRIVATE}) p
-       LEFT JOIN tokens t ON t.chain_id = p.chain_id AND t.address = p.token
-       LEFT JOIN events e ON e.chain_id = p.chain_id AND e.token = p.token
-       GROUP BY p.token ORDER BY events DESC`
-    )
-    .all();
-  log.info(`${affected.length} token(s) never seen on a shared venue:`);
-  for (const a of affected) log.dim(`  ${(a.symbol || a.token).padEnd(14)} ${a.events} event(s)`);
-
-  // Void rather than delete. A copy opened on a private venue was never a real
-  // opportunity, so it should not appear as a loss any more than as a win.
-  const voided = db
-    .prepare(
-      `UPDATE positions
-       SET status = 'skipped', skip_reason = 'private_venue',
-           pnl_usd = NULL, pnl_pct = NULL, exit_reason = NULL
-       WHERE (chain_id, token) IN (SELECT chain_id, token FROM (${PRIVATE}))
-         AND IFNULL(skip_reason, '') <> 'private_venue'`
-    )
-    .run();
-  log.ok(`voided ${voided.changes} position(s)`);
+  const solo = venues.filter((v) => v.tokens === 1).length;
+  log.info(`${solo} venue(s) serve exactly one token, which on its own means nothing`);
 
   db.close();
 }

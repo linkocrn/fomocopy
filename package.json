@@ -11,6 +11,7 @@
     "reprice": "node scripts/reprice.js",
     "reclassify": "node scripts/reclassify.js",
     "venues": "node scripts/venues.js",
+    "rebuild": "node scripts/rebuild.js",
     "report": "node scripts/report.js"
   },
   "dependencies": {
