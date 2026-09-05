@@ -10,6 +10,7 @@
     "backfill": "node scripts/backfill.js",
     "reprice": "node scripts/reprice.js",
     "reclassify": "node scripts/reclassify.js",
+    "venues": "node scripts/venues.js",
     "report": "node scripts/report.js"
   },
   "dependencies": {

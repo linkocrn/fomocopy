@@ -59,7 +59,7 @@ async function main() {
 
     let settled = null;
     try {
-      settled = await settlement(rpc, chain, row.tx_hash, row.token);
+      settled = await settlement(rpc, chain, row.tx_hash, row.token, row.side);
     } catch (e) {
       log.warn(`${row.tx_hash.slice(0, 12)} ${e.message}`);
     }

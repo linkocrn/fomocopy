@@ -68,7 +68,7 @@ class Engine {
 
     const quote = market ? await fetchPrice(chain, trade.token) : null;
 
-    const settled = await settlement(rpc, chain, trade.tx_hash, trade.token).catch(() => null);
+    const settled = await settlement(rpc, chain, trade.tx_hash, trade.token, trade.side).catch(() => null);
     const execPrice = settled?.usd && amount > 0 ? settled.usd / amount : null;
     const price = execPrice ?? quote?.price ?? null;
 
@@ -96,6 +96,7 @@ class Engine {
       amount,
       leader_frac: leaderFrac,
       kind,
+      venue: settled?.venue ?? null,
       price_usd: price,
       price_source: execPrice ? 'exec' : quote?.price ? 'dexscreener' : null,
       // The settled amount is the trade, full stop. Only the estimated path
@@ -179,6 +180,7 @@ class Engine {
 
     let skip = null;
     if (age > ENTRY.maxTradeAgeMs) skip = 'stale_replay';
+    else if (this.privateVenue(row)) skip = 'private_venue';
     else if (!quote?.price) skip = 'no_price';
     else if ((quote.liquidity ?? 0) < ENTRY.minLiquidityUsd) skip = 'low_liquidity';
     else if ((quote.fdv ?? 0) > ENTRY.maxFdvUsd) skip = 'fdv_too_high';
@@ -205,6 +207,16 @@ class Engine {
       });
     }
     if (skip) log.dim(`  skipped (${skip})`);
+  }
+
+  // Counted across the whole history rather than this token alone, so a shared
+  // venue is recognised on the first brand-new token it lists. An unknown venue
+  // reads as private until a second token appears on it, which is the safe way
+  // round: the cost is a skipped copy, not a hundred percent loss.
+  privateVenue(row) {
+    if (!row.venue) return false;
+    const { n } = this.st.venueTokens.get(row.venue, row.chain_id);
+    return n < ENTRY.minVenueTokens;
   }
 
   // A leader sell only touches positions opened by that same leader in that

@@ -145,6 +145,10 @@ function migrate(db) {
     // tokens arrived or left for free. Transfers stay in this table as history
     // but are excluded from every report by the `trades` view below.
     kind: "TEXT NOT NULL DEFAULT 'trade'",
+    // Who supplied the token on a buy, or received it on a sell. FOMO's own
+    // venues each serve a hundred-odd tokens; a venue serving exactly one is
+    // a float held by a single party. See ENTRY.minVenueTokens.
+    venue: 'TEXT',
   });
   addColumns(db, 'positions', {
     entry_liquidity_usd: 'REAL',
@@ -179,13 +183,19 @@ function statements(db) {
         (chain_id, block, log_index, tx_hash, ts, leader, side, token,
          amount_raw, amount, leader_frac, price_usd, size_usd, liquidity_usd, fdv_usd, mcap_usd,
          seen_ts, pair_created_at, pair_address, dex_id,
-         vol_h1, vol_h24, change_m5, change_h1, buys_h1, sells_h1, price_source, kind)
+         vol_h1, vol_h24, change_m5, change_h1, buys_h1, sells_h1, price_source, kind, venue)
       VALUES
         (@chain_id, @block, @log_index, @tx_hash, @ts, @leader, @side, @token,
          @amount_raw, @amount, @leader_frac, @price_usd, @size_usd, @liquidity_usd, @fdv_usd, @mcap_usd,
          @seen_ts, @pair_created_at, @pair_address, @dex_id,
-         @vol_h1, @vol_h24, @change_m5, @change_h1, @buys_h1, @sells_h1, @price_source, @kind)
+         @vol_h1, @vol_h24, @change_m5, @change_h1, @buys_h1, @sells_h1, @price_source, @kind, @venue)
     `),
+
+    // How many distinct tokens we have ever seen come out of this venue. One
+    // means nobody else uses it.
+    venueTokens: db.prepare(
+      'SELECT COUNT(DISTINCT token) n FROM events WHERE venue = ? AND chain_id = ?'
+    ),
     lastEventAt: db.prepare('SELECT MAX(ts) ts FROM events WHERE chain_id = ?'),
     getToken: db.prepare('SELECT * FROM tokens WHERE chain_id = ? AND address = ?'),
     putToken: db.prepare('INSERT OR REPLACE INTO tokens (chain_id, address, symbol, decimals) VALUES (?, ?, ?, ?)'),

@@ -36,6 +36,17 @@ const ENTRY = {
   // produced a fake +62% entry cost during testing. Live subscription trades
   // arrive within a couple of seconds, so this only ever rejects replays.
   maxTradeAgeMs: 60_000,
+
+  // Refuse tokens whose float sits in a venue nobody else trades through.
+  //
+  // Almost all FOMO flow is supplied by three shared venues holding 107, 40 and
+  // 26 tokens each. PONSVIL and AARTC were supplied by a contract serving that
+  // one token and nothing else, and both went to zero liquidity with every
+  // leader still holding the exact bag they bought. Holding pair age constant,
+  // of 51 tokens first bought inside 15 minutes of the pair existing, the 49 on
+  // a shared venue are all still alive and the 2 on a private one are the only
+  // rugs. Whoever controls a single-token venue controls the exit.
+  minVenueTokens: 2,
 };
 
 // A position we could no longer sell out of, at any price.
