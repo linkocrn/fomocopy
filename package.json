@@ -9,6 +9,7 @@
     "dev": "node --watch src/index.js",
     "backfill": "node scripts/backfill.js",
     "reprice": "node scripts/reprice.js",
+    "reclassify": "node scripts/reclassify.js",
     "report": "node scripts/report.js"
   },
   "dependencies": {

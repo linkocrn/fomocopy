@@ -64,7 +64,7 @@ async function main() {
       log.warn(`${row.tx_hash.slice(0, 12)} ${e.message}`);
     }
 
-    if (!settled) {
+    if (!settled?.usd) {
       missing++;
       continue;
     }

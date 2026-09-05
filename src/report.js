@@ -15,7 +15,7 @@ function median(xs) {
 }
 
 function overview(db) {
-  const t = db.prepare('SELECT COUNT(*) n, MIN(ts) a, MAX(ts) b FROM events').get();
+  const t = db.prepare('SELECT COUNT(*) n, MIN(ts) a, MAX(ts) b FROM trades').get();
   if (!t.n) return { events: 0 };
   const hours = (t.b - t.a) / 3_600_000;
   const chains = db
@@ -25,7 +25,7 @@ function overview(db) {
               SUM(side = 'sell') sells,
               COUNT(DISTINCT token)  tokens,
               COUNT(DISTINCT leader) leaders
-       FROM events GROUP BY chain_id`
+       FROM trades GROUP BY chain_id`
     )
     .all()
     .map((r) => ({ ...r, name: CHAINS[r.chain_id]?.name || String(r.chain_id) }));
@@ -37,7 +37,7 @@ function leaders(db, limit = 12) {
     .prepare(
       `SELECT leader, COUNT(*) n, SUM(side = 'buy') buys, SUM(side = 'sell') sells,
               COUNT(DISTINCT token) tokens
-       FROM events GROUP BY leader ORDER BY n DESC LIMIT ?`
+       FROM trades GROUP BY leader ORDER BY n DESC LIMIT ?`
     )
     .all(limit);
 }
@@ -50,7 +50,7 @@ function clusters(db, limit = 8) {
       `SELECT e.token, e.chain_id, COUNT(DISTINCT e.leader) n,
               GROUP_CONCAT(DISTINCT e.leader) who,
               (SELECT symbol FROM tokens t WHERE t.chain_id = e.chain_id AND t.address = e.token) symbol
-       FROM events e WHERE e.side = 'buy'
+       FROM trades e WHERE e.side = 'buy'
        GROUP BY e.chain_id, e.token HAVING n > 1 ORDER BY n DESC LIMIT ?`
     )
     .all(limit);
@@ -189,7 +189,7 @@ function leaderActivity(db, handle) {
     .prepare(
       `SELECT COUNT(*) n, SUM(side = 'buy') buys, SUM(side = 'sell') sells,
               COUNT(DISTINCT token) tokens, COUNT(DISTINCT chain_id) chains
-       FROM events WHERE leader = ?`
+       FROM trades WHERE leader = ?`
     )
     .get(handle);
 }
@@ -205,9 +205,9 @@ function leaderPositions(db, handle, policy) {
               (SELECT price         FROM marks m WHERE m.position_id = p.id ORDER BY offset_ms DESC LIMIT 1) last_price,
               (SELECT liquidity_usd FROM marks m WHERE m.position_id = p.id ORDER BY offset_ms DESC LIMIT 1) last_liquidity_usd,
               (SELECT mcap_usd      FROM marks m WHERE m.position_id = p.id ORDER BY offset_ms DESC LIMIT 1) last_mcap_usd,
-              (SELECT MAX(e.tx_hash) FROM events e
+              (SELECT MAX(e.tx_hash) FROM trades e
                 WHERE e.chain_id = p.chain_id AND e.token = p.token AND e.leader = p.leader
-                  AND e.ts = (SELECT MAX(ts) FROM events e2
+                  AND e.ts = (SELECT MAX(ts) FROM trades e2
                               WHERE e2.chain_id = p.chain_id AND e2.token = p.token AND e2.leader = p.leader)) last_tx
        FROM positions p
        WHERE p.leader = ? AND p.policy = ?
@@ -224,7 +224,7 @@ function leaderTokens(db, handle) {
               COUNT(*) n,
               SUM(e.side = 'buy') buys,
               SUM(e.side = 'sell') sells
-       FROM events e
+       FROM trades e
        LEFT JOIN tokens t ON t.chain_id = e.chain_id AND t.address = e.token
        WHERE e.leader = ?
        GROUP BY e.chain_id, e.token
@@ -252,7 +252,7 @@ function leaderTokenEvents(db, handle, chainId, token, limit = 40) {
   return db
     .prepare(
       `SELECT ts, side, size_usd, leader_frac, mcap_usd, liquidity_usd, tx_hash, log_index
-       FROM events
+       FROM trades
        WHERE leader = ? AND chain_id = ? AND token = ?
        ORDER BY ts DESC, log_index DESC
        LIMIT ?`
@@ -264,7 +264,7 @@ function leaderTokenEvents(db, handle, chainId, token, limit = 40) {
 function resolveLeader(db, arg) {
   const needle = String(arg || '').replace(/^@/, '').trim().toLowerCase();
   if (!needle) return null;
-  const fromEvents = db.prepare('SELECT DISTINCT leader FROM events').all().map((r) => r.leader);
+  const fromEvents = db.prepare('SELECT DISTINCT leader FROM trades').all().map((r) => r.leader);
   const names = [...new Set([...LEADERS.map((l) => l.handle), ...fromEvents])];
   return names.find((h) => h.toLowerCase() === needle) || null;
 }

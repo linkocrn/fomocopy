@@ -67,8 +67,14 @@ class Engine {
     const quote = market ? await fetchPrice(chain, trade.token) : null;
 
     const settled = await settlement(rpc, chain, trade.tx_hash, trade.token).catch(() => null);
-    const execPrice = settled && amount > 0 ? settled.usd / amount : null;
+    const execPrice = settled?.usd && amount > 0 ? settled.usd / amount : null;
     const price = execPrice ?? quote?.price ?? null;
+
+    // Tokens moved through the vault with no stablecoin anywhere in the
+    // transaction. Someone sent them, the leader did not buy them. Recorded so
+    // the history stays honest, but it is not a trade and nothing downstream
+    // should treat it as one.
+    const kind = settled && !settled.paid ? 'transfer' : 'trade';
 
     const leaderFrac = await this.leaderFraction(
       trade.chain_id,
@@ -87,13 +93,14 @@ class Engine {
       seen_ts: Date.now(),
       amount,
       leader_frac: leaderFrac,
+      kind,
       price_usd: price,
       price_source: execPrice ? 'exec' : quote?.price ? 'dexscreener' : null,
       // The settled amount is the trade, full stop. Only the estimated path
       // needs guarding: a size bigger than the whole coin is a quote read off
       // the wrong side of a pair, not a trade.
       size_usd: (() => {
-        if (settled) return settled.usd;
+        if (execPrice) return settled.usd;
         if (!quote?.price) return null;
         const size = amount * quote.price;
         if (quote.mcap && size > quote.mcap * 5) return null;
@@ -121,6 +128,13 @@ class Engine {
     const sym = meta.symbol || trade.token.slice(0, 8);
     const size = row.size_usd ? `$${Math.round(row.size_usd).toLocaleString()}` : 'size unknown';
     const fracTxt = leaderFrac != null ? ` (${Math.round(leaderFrac * 100)}% of bag)` : '';
+
+    if (kind === 'transfer') {
+      const dir = trade.side === 'buy' ? 'received' : 'sent';
+      log.info(`${chain.slug} ${dir} ${trade.leader} ${sym} ${amount.toLocaleString()} (no payment, not a trade)`);
+      return;
+    }
+
     log.info(`${chain.slug} ${trade.side.toUpperCase().padEnd(4)} ${trade.leader} ${sym} ${size}${fracTxt}`);
 
     if (!shadow) return;
