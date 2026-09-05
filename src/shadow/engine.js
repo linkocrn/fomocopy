@@ -1,7 +1,7 @@
 'use strict';
 
 const { logger } = require('../util/log');
-const { ENTRY, MARK_OFFSETS_MS, POLICIES } = require('../../config/policy');
+const { ENTRY, DEAD, MARK_OFFSETS_MS, POLICIES } = require('../../config/policy');
 const { fetchPrice } = require('../price/dexscreener');
 const { settlement } = require('../chain/settle');
 const { onLeaderSell, onPriceTick, reduce } = require('./policies');
@@ -16,6 +16,8 @@ class Engine {
     this.chains = new Map(chains.map((c) => [c.id, c]));
     this.rpcs = rpcs; // Map chainId -> Rpc
     this.notify = notify || (() => {});
+    // chainId:token -> consecutive reads showing no tradeable liquidity.
+    this.deadReads = new Map();
   }
 
   chain(id) {
@@ -272,9 +274,17 @@ class Engine {
     const work = new Map();
     for (const position of open) {
       const age = now - (position.entry_ts || position.opened_ts);
-      const taken = new Set(this.st.marksFor.all(position.id).map((m) => m.offset_ms));
+      const marks = this.st.marksFor.all(position.id);
+      const taken = new Set(marks.map((m) => m.offset_ms));
       const due = MARK_OFFSETS_MS.filter((o) => age >= o && !taken.has(o));
-      if (!due.length && !position.trail_armed && age < FINAL_OFFSET) continue;
+
+      // The last mark came back with the pool drained. Watch it every tick from
+      // here so the confirming read arrives in seconds rather than at whatever
+      // mark offset happens to be next, which can be hours away.
+      const last = marks.reduce((a, b) => (a && a.offset_ms > b.offset_ms ? a : b), null);
+      const draining = last?.liquidity_usd != null && last.liquidity_usd < DEAD.minLiquidityUsd;
+
+      if (!due.length && !position.trail_armed && !draining && age < FINAL_OFFSET) continue;
 
       const key = `${position.chain_id}:${position.token}`;
       if (!work.has(key)) work.set(key, []);
@@ -288,6 +298,8 @@ class Engine {
       const token = key.slice(key.indexOf(':') + 1);
       const quote = await fetchPrice(this.chain(chainId), token);
       if (!quote?.price) continue;
+
+      if (this.closeIfDead(key, items, quote, now)) continue;
 
       for (const { position, age, due } of items) {
         for (const offset of due) {
@@ -303,6 +315,41 @@ class Engine {
         }
       }
     }
+  }
+
+  // The pool drained. Close at the last quoted price rather than waiting out
+  // the horizon on a position that has already reached its final value.
+  //
+  // The price is kept rather than forced to zero because it is what the token
+  // is nominally worth, and pretending we know better invents a number. It is
+  // near enough to a total loss either way.
+  closeIfDead(key, items, quote, now) {
+    const liquidity = quote.liquidity ?? null;
+    if (liquidity == null || liquidity >= DEAD.minLiquidityUsd) {
+      this.deadReads.delete(key);
+      return false;
+    }
+
+    const reads = (this.deadReads.get(key) || 0) + 1;
+    this.deadReads.set(key, reads);
+    if (reads < DEAD.confirmations) return false;
+
+    const ctx = { st: this.st };
+    let closed = 0;
+    for (const { position } of items) {
+      if (position.status !== 'open') continue;
+      reduce(ctx, position, position.qty, quote.price, 'liquidity_gone', now);
+      closed++;
+    }
+    this.deadReads.delete(key);
+
+    if (closed) {
+      const chainId = Number(key.split(':')[0]);
+      const token = key.slice(key.indexOf(':') + 1);
+      const symbol = this.st.getToken.get(chainId, token)?.symbol || token.slice(0, 8);
+      log.warn(`${symbol} liquidity gone ($${Math.round(liquidity)}), closed ${closed} position(s) as a total loss`);
+    }
+    return true;
   }
 }
 

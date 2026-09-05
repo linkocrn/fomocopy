@@ -229,7 +229,7 @@ function statements(db) {
       INSERT OR REPLACE INTO marks (position_id, offset_ms, ts, price, pnl_pct, liquidity_usd, mcap_usd)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `),
-    marksFor: db.prepare('SELECT offset_ms FROM marks WHERE position_id = ?'),
+    marksFor: db.prepare('SELECT offset_ms, liquidity_usd FROM marks WHERE position_id = ?'),
 
     getCursor: db.prepare('SELECT block FROM cursors WHERE chain_id = ?'),
     setCursor: db.prepare('INSERT OR REPLACE INTO cursors (chain_id, block) VALUES (?, ?)'),

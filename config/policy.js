@@ -38,6 +38,24 @@ const ENTRY = {
   maxTradeAgeMs: 60_000,
 };
 
+// A position we could no longer sell out of, at any price.
+//
+// PONSVIL and AARTC both went from a healthy pool to nothing while thirteen and
+// eleven leaders respectively sat holding every token they had bought. There is
+// no sell to close against and no bid to close into, so without this the copies
+// stay open at -99.98% until the horizon, or forever if the token stops being
+// quoted at all. Recording them as the total losses they already are is the
+// honest reading.
+const DEAD = {
+  // Our exit is a $100 sale. Below this there is nothing to sell into, and a
+  // reading of exactly zero is the usual case anyway.
+  minLiquidityUsd: 1_000,
+
+  // One bad DexScreener response should not bury a live position, so a token
+  // has to read dead this many consecutive times before we act.
+  confirmations: 2,
+};
+
 // Marks are taken at these offsets from entry. Trailing policies also use them
 // as their evaluation ticks.
 const MARK_OFFSETS_MS = [
@@ -72,4 +90,4 @@ const POLICIES = {
   hold_24h: { trailPct: null, sellFraction: 0, onLeaderSell: 'ignore' },
 };
 
-module.exports = { ENTRY, MARK_OFFSETS_MS, POLICIES };
+module.exports = { ENTRY, DEAD, MARK_OFFSETS_MS, POLICIES };
