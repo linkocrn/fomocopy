@@ -36,6 +36,27 @@ const ENTRY = {
   // produced a fake +62% entry cost during testing. Live subscription trades
   // arrive within a couple of seconds, so this only ever rejects replays.
   maxTradeAgeMs: 60_000,
+
+  // Refuse tokens whose supply could still be sitting in one pair of hands
+  // when the leaders bought, because then a "buy" by a leader may be the
+  // deployer moving their own float into a famous wallet, and no amount of
+  // outcome data can tell us otherwise. Two conditions, and it needs both:
+  //
+  //   the token is not on a shared launchpad venue, so nothing vouches for how
+  //   the supply was distributed, and
+  //
+  //   its pool is younger than minOwnPoolAgeMs, so the deployer has not yet had
+  //   to let go of it.
+  //
+  // Either condition alone is useless. "Own pool" on its own flags WETH, cbBTC
+  // and the tokenised stocks, which have their own deep pools because that is
+  // what a real asset looks like; they clear this because their pools are 4 to
+  // 65 days old. "New pool" on its own flags every launchpad coin, and those
+  // are fine precisely because the launchpad holds the liquidity.
+  //
+  // Together they flag 5 tokens out of 260 and cost 2.1% of events.
+  minVenueTokens: 2,
+  minOwnPoolAgeMs: 24 * 60 * 60_000,
 };
 
 // A position we could no longer sell out of, at any price.

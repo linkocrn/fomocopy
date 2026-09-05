@@ -181,6 +181,7 @@ class Engine {
     let skip = null;
     if (age > ENTRY.maxTradeAgeMs) skip = 'stale_replay';
     else if (!quote?.price) skip = 'no_price';
+    else if (this.controlledSupply(row, quote)) skip = 'controlled_supply';
     else if ((quote.liquidity ?? 0) < ENTRY.minLiquidityUsd) skip = 'low_liquidity';
     else if ((quote.fdv ?? 0) > ENTRY.maxFdvUsd) skip = 'fdv_too_high';
     else if (
@@ -206,6 +207,14 @@ class Engine {
       });
     }
     if (skip) log.dim(`  skipped (${skip})`);
+  }
+
+  // See ENTRY.minVenueTokens. Without a pair date there is nothing to judge, so
+  // the token is let through rather than condemned on half the evidence.
+  controlledSupply(row, quote) {
+    if (!row.venue || !quote?.pairCreatedAt) return false;
+    if (Date.now() - quote.pairCreatedAt >= ENTRY.minOwnPoolAgeMs) return false;
+    return this.st.venueTokens.get(row.venue, row.chain_id).n < ENTRY.minVenueTokens;
   }
 
   // A leader sell only touches positions opened by that same leader in that
