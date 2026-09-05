@@ -41,10 +41,10 @@ if (clusters.length) {
 const e = R.entryCost(db);
 if (e) {
   bar(`Entry cost (our fill vs leader's, ${e.delaySec}s later)`);
-  console.log(`  positions: ${e.n}`);
-  console.log(`  mean:      ${pct(e.mean)}`);
+  console.log(`  positions: ${e.n}${e.dropped ? `  (${e.dropped} dropped as bad quotes)` : ''}`);
   console.log(`  median:    ${pct(e.median)}`);
-  console.log(`  worst:     ${pct(e.worst)}`);
+  console.log(`  mean:      ${pct(e.mean)}`);
+  console.log(`  p90:       ${pct(e.p90)}`);
   console.log('  Positive is the part of their pump we buy. Negative is their price impact,');
   console.log('  which they pay on the whole order and our $100 does not.');
 }

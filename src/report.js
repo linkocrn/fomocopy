@@ -63,20 +63,36 @@ function clusters(db, limit = 8) {
 // is a $100 print 30s later that moves nothing. So a negative number is not us
 // outtrading them, it is us not paying to push the book the way they did. A
 // positive number is the part of their pump we still buy.
+// A price cannot move 10x in 30 seconds; a quote read off a broken pool can.
+// One SLINK entry came back 1610x the leader's fill and dragged the mean to
+// +257% while the median sat at -4%, which made the headline number worse than
+// useless. Ratios outside this band are dropped and counted, not averaged in.
+const SANE_LO = 0.1;
+const SANE_HI = 10;
+
 function entryCost(db) {
-  const d = db
+  const all = db
     .prepare(
-      `SELECT (entry_price / leader_price - 1) * 100 v FROM positions
+      `SELECT entry_price / leader_price ratio FROM positions
        WHERE policy = 'hold_24h' AND entry_price IS NOT NULL AND leader_price > 0`
     )
     .all()
-    .map((r) => r.v);
-  if (!d.length) return null;
+    .map((r) => r.ratio);
+  if (!all.length) return null;
+
+  const kept = all.filter((r) => r >= SANE_LO && r <= SANE_HI);
+  if (!kept.length) return null;
+  const d = kept.map((r) => (r - 1) * 100);
+  const sorted = [...d].sort((a, b) => a - b);
+
   return {
     n: d.length,
+    dropped: all.length - kept.length,
     mean: d.reduce((a, b) => a + b, 0) / d.length,
     median: median(d),
-    worst: Math.max(...d),
+    // The 90th percentile is the tail you actually pay. The single max is
+    // usually just the worst quote in the set.
+    p90: sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))],
     delaySec: ENTRY.entryDelayMs / 1000,
   };
 }

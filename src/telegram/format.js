@@ -99,7 +99,8 @@ function scoreboard(db) {
 
   if (e) {
     out.push('', `<b>Entry cost</b> (our fill ${e.delaySec}s after theirs, n=${e.n})`);
-    out.push(`mean ${pct(e.mean)} · median ${pct(e.median)} · worst ${pct(e.worst)}`);
+    out.push(`median ${pct(e.median)} · mean ${pct(e.mean)} · p90 ${pct(e.p90)}`);
+    if (e.dropped) out.push(`<i>${e.dropped} dropped as bad quotes.</i>`);
     out.push('<i>Positive means we bought their pump. Negative is the price impact they pay on the whole order and our $100 does not.</i>');
   }
   return out.join('\n');
