@@ -29,6 +29,7 @@ const usd = (n) => (n == null ? '-' : `${n < 0 ? '-' : ''}$${Math.abs(n).toFixed
 const pct = (n) => (n == null ? '-' : `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`);
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const pre = (s) => `<pre>${esc(s)}</pre>`;
+const named = (rows) => rows.map((r) => `${icon(r.leader)} ${esc(r.leader)}`).join(', ');
 
 function overview(db) {
   const o = R.overview(db);
@@ -384,5 +385,6 @@ module.exports = {
   usd,
   pct,
   esc,
+  named,
   ago: ageShort,
 };

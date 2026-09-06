@@ -1,40 +1,9 @@
 'use strict';
 
-const { logger } = require('../util/log');
-const { EVM_LEADERS } = require('../../config/leaders');
+const { EVM_LEADERS, icon } = require('../../config/leaders');
 const fmt = require('./format');
 const { makeAlerter } = require('./alerts');
-
-const log = logger('telegram');
-const API = (token, method) => `https://api.telegram.org/bot${token}/${method}`;
-
-// Telegram hard-rejects a message over 4096 characters and the failure is a
-// silent 400, so a long report would simply never arrive. Split on line
-// boundaries, and never inside a <pre>, since a half-open tag breaks the
-// message that carries it.
-const LIMIT = 3800;
-
-function chunk(text, limit = LIMIT) {
-  if (text.length <= limit) return [text];
-
-  const out = [];
-  let buf = '';
-  let depth = 0;
-
-  for (const line of text.split('\n')) {
-    if (depth === 0 && buf && buf.length + 1 + line.length > limit) {
-      out.push(buf);
-      buf = '';
-    }
-    buf = buf ? `${buf}\n${line}` : line;
-    depth += (line.match(/<pre>/g) || []).length - (line.match(/<\/pre>/g) || []).length;
-  }
-  if (buf) out.push(buf);
-
-  // A single <pre> longer than the cap cannot be split safely on lines, so cut
-  // it bluntly rather than let Telegram drop the message.
-  return out.flatMap((p) => (p.length <= 4096 ? p : p.match(/[\s\S]{1,4000}/g)));
-}
+const { Inbox, chunk } = require('./inbox');
 
 const HELP = [
   '<b>FOMO Copy</b> · shadow mode',
@@ -52,62 +21,42 @@ const HELP = [
   '/mute &lt;handle&gt; · stop alerting and stop copying them',
   '/unmute &lt;handle&gt; · resume',
   '/muted · who is muted',
+  '/focus &lt;handle&gt; · also alert on the quiet bot',
+  '/unfocus &lt;handle&gt; · drop them from it',
+  '/focused · who is on the quiet bot',
   '/pause · /resume · all alerts',
 ].join('\n');
 
+function findLeader(arg) {
+  return EVM_LEADERS.find((l) => l.handle.toLowerCase() === arg.toLowerCase());
+}
+
 class Bot {
   constructor({ token, st, db, state }) {
-    this.token = token;
     this.st = st;
     this.db = db;
-    this.state = state; // { startedAt, chains, watchers }
-    // Persisted, because getUpdates replays anything unconfirmed. Under
-    // `npm run dev` the process restarts on every file save, and a fresh
-    // offset would make the bot answer the same command again after each one.
-    this.offset = Number(st.getSetting.get('tg_offset')?.value || 0);
-    this.stopped = false;
-    this.queue = Promise.resolve();
-    this.owner = st.getSetting.get('owner_chat_id')?.value || process.env.TELEGRAM_CHAT_ID || null;
-    this.alerter = makeAlerter((text, extra) => this.send(text, extra));
+    this.state = state; // { startedAt, chains, watchers, focus }
+    this.inbox = new Inbox({
+      token,
+      st,
+      keys: { offset: 'tg_offset', owner: 'owner_chat_id' },
+      fallbackOwner: process.env.TELEGRAM_CHAT_ID || null,
+      logName: 'telegram',
+    });
+    this.inbox.onMessage = (msg) => this.handle(msg);
+    this.alerter = makeAlerter((text, extra) => this.inbox.send(text, extra));
+  }
+
+  get owner() {
+    return this.inbox.owner;
   }
 
   get paused() {
     return this.st.getSetting.get('paused')?.value === '1';
   }
 
-  // Serialised with a gap so a burst of leader trades cannot trip Telegram's
-  // rate limit and drop messages. Anything over the length cap is split first,
-  // otherwise the whole reply is dropped with only a warning in the log.
-  send(text, chatId = this.owner, extra = {}) {
-    if (chatId && typeof chatId === 'object') {
-      extra = chatId;
-      chatId = this.owner;
-    }
-    if (!chatId) return;
-
-    const parts = chunk(text);
-    for (const [i, part] of parts.entries()) {
-      this.queue = this.queue
-        .then(() =>
-          fetch(API(this.token, 'sendMessage'), {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              chat_id: chatId,
-              text: part,
-              parse_mode: 'HTML',
-              disable_web_page_preview: true,
-              // Buttons belong on the last part, where the reader ends up.
-              ...(extra.reply_markup && i === parts.length - 1 ? { reply_markup: extra.reply_markup } : {}),
-            }),
-          }).then(async (r) => {
-            if (!r.ok) log.warn(`sendMessage ${r.status}: ${(await r.text()).slice(0, 160)}`);
-          })
-        )
-        .then(() => new Promise((r) => setTimeout(r, 1100)))
-        .catch((e) => log.warn(e.message));
-    }
-    return this.queue;
+  send(text, chatId, extra) {
+    return this.inbox.send(text, chatId, extra);
   }
 
   // The alert path used by the engine. Takes a structured trade rather than a
@@ -117,46 +66,12 @@ class Bot {
     this.alerter(trade);
   }
 
-  async start() {
-    const me = await (await fetch(API(this.token, 'getMe'))).json();
-    if (!me.ok) throw new Error(`getMe failed: ${JSON.stringify(me).slice(0, 160)}`);
-    log.ok(`@${me.result.username} connected${this.owner ? ` (owner ${this.owner})` : ' — send /start to bind'}`);
-    this.poll();
+  start() {
+    return this.inbox.start();
   }
 
   stop() {
-    this.stopped = true;
-  }
-
-  async poll() {
-    while (!this.stopped) {
-      try {
-        const res = await fetch(API(this.token, 'getUpdates') + `?timeout=30&offset=${this.offset}`, {
-          signal: AbortSignal.timeout(40_000),
-        });
-        const json = await res.json();
-
-        // Two processes cannot long-poll the same bot. This happens for a
-        // moment during a --watch restart while the old one is still winding
-        // down, and resolves itself, so it is not worth shouting about.
-        if (json.error_code === 409) {
-          await new Promise((r) => setTimeout(r, 1500));
-          continue;
-        }
-
-        for (const update of json.result || []) {
-          this.offset = update.update_id + 1;
-          this.st.setSetting.run('tg_offset', String(this.offset));
-          const msg = update.message;
-          if (msg?.text) await this.handle(msg);
-        }
-      } catch (e) {
-        if (!this.stopped) {
-          log.warn(`poll: ${e.message}`);
-          await new Promise((r) => setTimeout(r, 3000));
-        }
-      }
-    }
+    this.inbox.stop();
   }
 
   async handle(msg) {
@@ -165,15 +80,14 @@ class Bot {
 
     // Single-user bot: the first chat to say anything becomes the owner, so
     // there is no chat id to look up by hand.
-    if (!this.owner) {
-      this.owner = chatId;
-      this.st.setSetting.run('owner_chat_id', chatId);
-      log.ok(`bound to chat ${chatId} (@${msg.from?.username || msg.from?.first_name})`);
+    if (!this.inbox.owner) {
+      this.inbox.bind(chatId);
+      this.inbox.log.ok(`bound to chat ${chatId} (@${msg.from?.username || msg.from?.first_name})`);
       await this.send(`Bound to this chat. Alerts will arrive here.\n\n${HELP}`, chatId);
       return;
     }
-    if (chatId !== this.owner) {
-      log.warn(`ignoring message from ${chatId}`);
+    if (chatId !== this.inbox.owner) {
+      this.inbox.log.warn(`ignoring message from ${chatId}`);
       return;
     }
 
@@ -216,7 +130,7 @@ class Bot {
 
       case '/mute': {
         if (!arg) return reply('Usage: <code>/mute handle</code>');
-        const hit = EVM_LEADERS.find((l) => l.handle.toLowerCase() === arg.toLowerCase());
+        const hit = findLeader(arg);
         if (!hit) return reply(`No leader called <b>${fmt.esc(arg)}</b>. Try /leaders.`);
         this.st.mute.run(hit.handle, Date.now());
         return reply(`Muted <b>${fmt.esc(hit.handle)}</b>. No alerts and no new shadow positions from them. Their trades are still recorded.`);
@@ -224,7 +138,7 @@ class Bot {
 
       case '/unmute': {
         if (!arg) return reply('Usage: <code>/unmute handle</code>');
-        const hit = EVM_LEADERS.find((l) => l.handle.toLowerCase() === arg.toLowerCase());
+        const hit = findLeader(arg);
         if (!hit) return reply(`No leader called <b>${fmt.esc(arg)}</b>.`);
         this.st.unmute.run(hit.handle);
         return reply(`Unmuted <b>${fmt.esc(hit.handle)}</b>.`);
@@ -232,7 +146,34 @@ class Bot {
 
       case '/muted': {
         const rows = this.st.listMuted.all();
-        return reply(rows.length ? `Muted: ${rows.map((r) => fmt.esc(r.leader)).join(', ')}` : 'Nobody is muted.');
+        return reply(rows.length ? `Muted: ${fmt.named(rows)}` : 'Nobody is muted.');
+      }
+
+      case '/focus': {
+        if (!arg) return reply('Usage: <code>/focus handle</code>');
+        const hit = findLeader(arg);
+        if (!hit) return reply(`No leader called <b>${fmt.esc(arg)}</b>. Try /leaders.`);
+        this.st.focus.run(hit.handle, Date.now());
+        const quiet = this.state.focus;
+        const dest = quiet?.username ? `@${quiet.username}` : 'the quiet bot';
+        return reply(
+          `${icon(hit.handle)} <b>${fmt.esc(hit.handle)}</b> will also alert on ${dest}.` +
+            (quiet?.bound ? '' : '\nOpen that bot and send /start once so it can write to you.')
+        );
+      }
+
+      case '/unfocus': {
+        if (!arg) return reply('Usage: <code>/unfocus handle</code>');
+        const hit = findLeader(arg);
+        if (!hit) return reply(`No leader called <b>${fmt.esc(arg)}</b>.`);
+        this.st.unfocus.run(hit.handle);
+        return reply(`${icon(hit.handle)} <b>${fmt.esc(hit.handle)}</b> dropped from the quiet bot.`);
+      }
+
+      case '/focused': {
+        const rows = this.st.listFocused.all();
+        if (!rows.length) return reply('Nobody is focused. <code>/focus handle</code> to pick one.');
+        return reply(`Focused: ${fmt.named(rows)}`);
       }
 
       case '/pause':
@@ -251,6 +192,7 @@ class Bot {
   status() {
     const up = (Date.now() - this.state.startedAt) / 3_600_000;
     const muted = this.st.listMuted.all().length;
+    const focused = this.st.listFocused.all();
     const lines = [
       '<b>Status</b>',
       `Shadow mode, nothing executed. Up ${up < 1 ? `${Math.round(up * 60)}m` : `${up.toFixed(1)}h`}.`,
@@ -268,10 +210,19 @@ class Bot {
       );
     }
     lines.push('', fmt.overview(this.db));
+    if (this.state.focus) {
+      const dest = this.state.focus.username ? `@${this.state.focus.username}` : 'quiet bot';
+      lines.push(
+        '',
+        this.state.focus.bound
+          ? `${dest} is bound. ${focused.length ? `Focused: ${fmt.named(focused)}` : 'Nobody focused yet.'}`
+          : `${dest} is running. Send it /start once so it can write to you.`
+      );
+    }
     if (muted) lines.push('', `${muted} leader(s) muted.`);
     if (this.paused) lines.push('', '<b>Alerts are paused.</b>');
     return lines.join('\n');
   }
 }
 
-module.exports = { Bot, HELP, chunk };
+module.exports = { Bot, HELP, chunk, findLeader };

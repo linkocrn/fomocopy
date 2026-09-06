@@ -107,6 +107,8 @@ Commands:
 | `/policies` | what the five exit strategies do |
 | `/mute <handle>` | stop alerting and stop copying them |
 | `/unmute <handle>`, `/muted` | reverse it, list them |
+| `/focus <handle>` | also alert on the quiet bot |
+| `/unfocus <handle>`, `/focused` | drop them, list them |
 | `/pause`, `/resume` | all alerts |
 
 Muting stops alerts and stops opening new positions from that leader, but their
@@ -114,6 +116,11 @@ sells still close positions already opened from them. Otherwise muting would
 strand live positions with no exit. Their trades stay in the event log either
 way, because the raw history should be complete regardless of what we were
 listening to.
+
+Telegram will not split one bot's notifications across chats, so a second bot
+token (`TELEGRAM_FOCUS_BOT_TOKEN`) runs in the same process and only fires for
+leaders you `/focus`. The main bot still gets everyone. Send the quiet bot
+`/start` once so it is allowed to write to you.
 
 `npm run report` renders the same data to a terminal from the same queries in
 `src/report.js`, so the two views cannot drift apart.

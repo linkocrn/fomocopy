@@ -10,6 +10,7 @@ const { Rpc } = require('./chain/rpc');
 const { Watcher } = require('./chain/watcher');
 const { Engine } = require('./shadow/engine');
 const { Bot } = require('./telegram/bot');
+const { FocusBot } = require('./telegram/focus');
 
 const log = logger('fomocopy');
 const TICK_MS = 15_000;
@@ -23,7 +24,11 @@ async function main() {
   const rpcs = new Map(chains.map((c) => [c.id, new Rpc(c.wss())]));
 
   let bot = null;
-  const notify = (text) => bot?.notify(text);
+  let focus = null;
+  const notify = (trade) => {
+    bot?.notify(trade);
+    focus?.notify(trade);
+  };
   const engine = new Engine({ db, st, chains, rpcs, notify });
 
   log.info(`shadow mode | ${EVM_LEADERS.length} EVM leaders | chains: ${chains.map((c) => c.name).join(', ')}`);
@@ -40,12 +45,17 @@ async function main() {
       })
   );
 
+  if (process.env.TELEGRAM_FOCUS_BOT_TOKEN) {
+    focus = new FocusBot({ token: process.env.TELEGRAM_FOCUS_BOT_TOKEN, st });
+    await focus.start();
+  }
+
   if (process.env.TELEGRAM_BOT_TOKEN) {
     bot = new Bot({
       token: process.env.TELEGRAM_BOT_TOKEN,
       st,
       db,
-      state: { startedAt, chains, watchers },
+      state: { startedAt, chains, watchers, focus },
     });
     await bot.start();
   } else {
@@ -63,6 +73,7 @@ async function main() {
     clearInterval(timer);
     for (const w of watchers) w.stop();
     bot?.stop();
+    focus?.stop();
     db.close();
     process.exit(0);
   };

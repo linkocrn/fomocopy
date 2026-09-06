@@ -121,6 +121,13 @@ function migrate(db) {
       leader TEXT PRIMARY KEY,
       since  INTEGER NOT NULL
     );
+
+    -- Leaders whose trades also go to the quiet Telegram bot. The main bot
+    -- still gets everyone. This list is just the second inbox's filter.
+    CREATE TABLE IF NOT EXISTS focused (
+      leader TEXT PRIMARY KEY,
+      since  INTEGER NOT NULL
+    );
   `);
 
   addColumns(db, 'events', {
@@ -250,6 +257,11 @@ function statements(db) {
     unmute: db.prepare('DELETE FROM muted WHERE leader = ?'),
     isMuted: db.prepare('SELECT 1 FROM muted WHERE leader = ?'),
     listMuted: db.prepare('SELECT leader FROM muted ORDER BY leader'),
+
+    focus: db.prepare('INSERT OR REPLACE INTO focused (leader, since) VALUES (?, ?)'),
+    unfocus: db.prepare('DELETE FROM focused WHERE leader = ?'),
+    isFocused: db.prepare('SELECT 1 FROM focused WHERE leader = ?'),
+    listFocused: db.prepare('SELECT leader FROM focused ORDER BY leader'),
   };
 }
 
