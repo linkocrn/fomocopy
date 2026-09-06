@@ -37,6 +37,13 @@ const ENTRY = {
   // arrive within a couple of seconds, so this only ever rejects replays.
   maxTradeAgeMs: 60_000,
 
+  // Brand-new pairs are where the fake-buy clusters show up: thirteen leaders
+  // "bought" PONSVIL at 3 minutes, eleven bought AARTC at 3 minutes, PEZ at 1.
+  // A pool that has not sat through half an hour of order flow has not had to
+  // prove it can. Alerts and copies both skip. Sells of a token we already
+  // hold still close, because the pair may have been older when we entered.
+  minPairAgeMs: 30 * 60_000,
+
   // Refuse tokens whose supply could still be sitting in one pair of hands
   // when the leaders bought, because then a "buy" by a leader may be the
   // deployer moving their own float into a famous wallet, and no amount of

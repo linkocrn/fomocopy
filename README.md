@@ -200,6 +200,8 @@ which path produced each row, so an estimate is never mistaken for a measurement
   skipped list. A replayed *sell* still closes positions opened before the gap,
   at the current price rather than the price when they actually sold, so long
   downtime makes those particular exits pessimistic.
+- Pairs younger than `ENTRY.minPairAgeMs` (30 minutes) are skipped as
+  `pair_too_new` and do not alert. That is where the clustered fake buys land.
 
 ## Layout
 

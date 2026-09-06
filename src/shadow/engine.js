@@ -147,7 +147,7 @@ class Engine {
     // Otherwise muting would strand live positions with no exit.
     const muted = !!this.st.isMuted.get(trade.leader);
 
-    if (!muted) {
+    if (!muted && !this.pairTooNew(row, quote)) {
       this.notify({
         chain,
         leader: trade.leader,
@@ -181,6 +181,7 @@ class Engine {
     let skip = null;
     if (age > ENTRY.maxTradeAgeMs) skip = 'stale_replay';
     else if (!quote?.price) skip = 'no_price';
+    else if (this.pairTooNew(row, quote)) skip = 'pair_too_new';
     else if (this.controlledSupply(row, quote)) skip = 'controlled_supply';
     else if ((quote.liquidity ?? 0) < ENTRY.minLiquidityUsd) skip = 'low_liquidity';
     else if ((quote.fdv ?? 0) > ENTRY.maxFdvUsd) skip = 'fdv_too_high';
@@ -207,6 +208,14 @@ class Engine {
       });
     }
     if (skip) log.dim(`  skipped (${skip})`);
+  }
+
+  // Age of the pool at the leader's fill, not now. A trade we see late is
+  // still a 4-minute-old pair if that is when they bought.
+  pairTooNew(row, quote) {
+    const created = quote?.pairCreatedAt ?? row.pair_created_at;
+    if (!created) return false;
+    return row.ts - created < ENTRY.minPairAgeMs;
   }
 
   // See ENTRY.minVenueTokens. Without a pair date there is nothing to judge, so
