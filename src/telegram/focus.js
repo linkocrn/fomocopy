@@ -38,7 +38,7 @@ class FocusBot {
   }
 
   notify(trade) {
-    if (this.paused) return;
+    if (this.paused || !this.bound) return;
     if (!this.st.isFocused.get(trade.leader)) return;
     this.alerter(trade);
   }

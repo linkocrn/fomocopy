@@ -109,20 +109,29 @@ function makeAlerter(send) {
   function flush(key) {
     const b = bursts.get(key);
     bursts.delete(key);
-    if (b && b.extras > 0) send(rollup(b));
+    if (b && b.delivered && b.extras > 0) send(rollup(b));
   }
 
   return function alert(t) {
     const key = `${t.chain.id}:${t.leader}:${t.token}:${t.side}`;
     const existing = bursts.get(key);
 
-    if (!existing) {
-      send(single(t));
+    // send() returns false when there is no chat to write to (quiet bot
+    // not /start'ed yet). Do not open a burst in that case, or the next
+    // trade becomes a "kept going" rollup for a first message nobody got.
+    if (!existing || !existing.delivered) {
+      const delivered = send(single(t)) !== false;
+      if (existing) {
+        clearTimeout(existing.timer);
+        bursts.delete(key);
+      }
+      if (!delivered) return;
       bursts.set(key, {
         ...t,
         extras: 0,
         totalUsd: t.sizeUsd || 0,
         lastMcap: t.mcap,
+        delivered: true,
         timer: setTimeout(() => flush(key), BURST_QUIET_MS),
       });
       return;

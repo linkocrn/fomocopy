@@ -55,7 +55,7 @@ class Inbox {
       extra = chatId;
       chatId = this.owner;
     }
-    if (!chatId) return;
+    if (!chatId) return false;
 
     const parts = chunk(text);
     for (const [i, part] of parts.entries()) {
